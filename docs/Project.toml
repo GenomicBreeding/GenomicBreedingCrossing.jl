@@ -16,4 +16,3 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 GenomicBreedingCore = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingCore.jl"}
 GenomicBreedingIO = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingIO.jl"}
 GenomicBreedingModels = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingModels.jl"}
-GenomicBreedingPlots = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingPlots.jl"}
