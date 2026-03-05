@@ -1,6 +1,6 @@
 module GenomicBreedingCrossing
 
-using GenomicBreeding, GenomicBreedingCore, GenomicBreedingModels
+using GenomicBreedingCore, GenomicBreedingModels
 using Random, StatsBase, DataFrames, Distributions, UnicodePlots, MultivariateStats, JLD2
 using CairoMakie, ColorSchemes
 
