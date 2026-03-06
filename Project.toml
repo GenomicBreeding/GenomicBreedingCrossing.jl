@@ -20,10 +20,17 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
-[sources]
-GenomicBreedingCore = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingCore.jl"}
-GenomicBreedingIO = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingIO.jl"}
-GenomicBreedingModels = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingModels.jl"}
+[sources.GenomicBreedingCore]
+rev = "main"
+url = "https://github.com/GenomicBreeding/GenomicBreedingCore.jl"
+
+[sources.GenomicBreedingIO]
+rev = "main"
+url = "https://github.com/GenomicBreeding/GenomicBreedingIO.jl"
+
+[sources.GenomicBreedingModels]
+rev = "main"
+url = "https://github.com/GenomicBreeding/GenomicBreedingModels.jl"
 
 [compat]
 CSV = "0.10.16"
@@ -35,7 +42,7 @@ Documenter = "1.17.0"
 GenomicBreedingCore = "0.2.0"
 GenomicBreedingIO = "0.2.0"
 GenomicBreedingModels = "0.2.0"
-JLD2 = "0.5.15"
+JLD2 = "0.5.15, 0.6"
 JuliaFormatter = "2.3.0"
 MultivariateStats = "0.10.4"
 Random = "1.11.0"
