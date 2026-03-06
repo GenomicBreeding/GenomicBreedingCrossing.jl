@@ -1,7 +1,7 @@
 module GenomicBreedingCrossing
 
 using GenomicBreedingCore, GenomicBreedingModels
-using Random, StatsBase, DataFrames, Distributions, UnicodePlots, MultivariateStats, JLD2
+using Random, StatsBase, DataFrames, Distributions, UnicodePlots, MultivariateStats, JLD2, CSV
 using CairoMakie, ColorSchemes
 
 include("sim_naive.jl")
