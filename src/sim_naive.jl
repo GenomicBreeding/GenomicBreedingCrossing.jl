@@ -9,11 +9,10 @@ function simulate_naive()
     selection_direction_to_the_right::Bool = true
 
     n_cycles = length(n_plants_per_cycle)
-
     populations = Dict()
     for t in 1:n_cycles
         # t = 1
-        # trait = traits[1]
+        n = n_plants_per_cycle[t]
         D_0 = let
             ϕ = filter(x -> !ismissing(x) && !isinf(x) && !isnan(x), y) |> x -> Float64.(x)
             sort!(ϕ)
@@ -25,14 +24,14 @@ function simulate_naive()
             (-Inf, percentile(D_0, 100 * i))
         end
         D_s = truncated(D_0, lower, upper)
-        μ = (h²_realised[trait][end] * ρ * (mean(D_s) - mean(D_0))) + mean(D_0) # mean is a function of the heritability, selection efficiency, selections and base population
+        μ = (h²_realised * ρ * (mean(D_s) - mean(D_0))) + mean(D_0) # mean is a function of the heritability, selection efficiency, selections and base population
         # TODO: comment/explain the intuition and that probably something better may exist
-        σ = sqrt(var(D_s) + (var(D_0) * h²_realised[trait][end]))
+        σ = sqrt(var(D_s) + (var(D_0) * h²_realised))
         D_1 = Normal(μ, σ)
         # For now we fix heritability:
-        # # TODO: a better way to update h²_realised[trait][end]? --> random walk? Increase? Decrease?
-        # r = 0.25*h²_realised[trait][end] * (mean(D_1) - mean(D_0)) / (mean(D_s) - mean(D_0))
-        # push!(h²_realised[trait], h²_realised[trait][end] + r*(1-h²_realised[trait][end]))
+        # # TODO: a better way to update h²_realised? --> random walk? Increase? Decrease?
+        # r = 0.25*h²_realised * (mean(D_1) - mean(D_0)) / (mean(D_s) - mean(D_0))
+        # push!(h²_realised[trait], h²_realised + r*(1-h²_realised))
         # Plot
         y_0 = rand(D_0, n) |> sort
         y_s = rand(D_s, n) |> sort
@@ -44,26 +43,16 @@ function simulate_naive()
         d_s[1] = 0.0
         d_1 = pdf(D_1, y_1)
         d_1 = (d_1 .- minimum(d_1)) ./ (maximum(d_1) .- minimum(d_1))
-        p = UnicodePlots.lineplot(y_0, d_0, title="$trait\nh²=$(round(h²_realised[trait][end],digits=2))\nR=($(round(mean(D_1),digits=2)) - $(round(mean(D_0),digits=2))) = $(round(mean(D_1)-mean(D_0),digits=2))", xlim=(minimum(vcat(y_0, y_s, y_1)), maximum(vcat(y_0, y_s, y_1))))
+        p = UnicodePlots.lineplot(y_0, d_0, title="h²=$(round(h²_realised,digits=2))\nR=($(round(mean(D_1),digits=2)) - $(round(mean(D_0),digits=2))) = $(round(mean(D_1)-mean(D_0),digits=2))", xlim=(minimum(vcat(y_0, y_s, y_1)), maximum(vcat(y_0, y_s, y_1))))
         UnicodePlots.lineplot!(p, y_s, d_s)
         UnicodePlots.lineplot!(p, y_1, d_1)
         display(p)
         # Collect information
-        if !haskey(populations, trait)
-            populations[trait] = Dict(
-                "cycles" => [t],
-                "traits" => [trait],
-                "D_0" => [D_0],
-                "D_s" => [D_s],
-                "D_1" => [D_1],
-            )
-        else
-            push!(populations[trait]["cycles"], t)
-            push!(populations[trait]["traits"], trait)
-            push!(populations[trait]["D_0"], D_0)
-            push!(populations[trait]["D_s"], D_s)
-            push!(populations[trait]["D_1"], D_1)
-        end
+        populations[t] = Dict(
+            "D_0" => [D_0],
+            "D_s" => [D_s],
+            "D_1" => [D_1],
+        )
     end
     populations
 end
@@ -83,7 +72,7 @@ end
 #     d = pdf(populations[trait]["D_0"][1], ŷ)
 #     d = (d .- minimum(d)) ./ (maximum(d) - minimum(d))
 #     xlim = ((minimum(ŷ)), maximum(vcat(ŷ, rand(populations[trait]["D_1"][end], n))))
-#     p = UnicodePlots.lineplot(ŷ, d, title="$trait (h²=$(round(h²_realised[trait][end],digits=2)))", width=100, xlim=xlim)
+#     p = UnicodePlots.lineplot(ŷ, d, title="$trait (h²=$(round(h²_realised,digits=2)))", width=100, xlim=xlim)
 #     for t in populations[trait]["cycles"]
 #         ŷ = rand(populations[trait]["D_1"][t], n) |> sort
 #         d = pdf(populations[trait]["D_1"][t], ŷ)
@@ -112,7 +101,7 @@ end
 #         title = string(split(trait, "|")[2], "\n", replace(replace(replace(split(trait, "|")[3], "NUE" => "highN"), "WUE" => "drought"), "Control" => "lowN"))
 #         axs[trait] = CairoMakie.Axis(
 #             fig[i, j],
-#             title="$title\n(h²=$(round(h²_realised[trait][end],digits=2)))",
+#             title="$title\n(h²=$(round(h²_realised,digits=2)))",
 #             limits=(xlim, nothing)
 #         )
 #         CairoMakie.lines!(axs[trait], ŷ, d)
