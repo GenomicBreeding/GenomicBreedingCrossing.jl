@@ -1,4 +1,8 @@
-
+mutable struct BreedingPopulation
+    cycles::Vector{Int64}
+    trait_names::Vector{String}
+    # TODO
+end
 
 function simulate_naive()
     i = 0.1 # i.e. top 10%
