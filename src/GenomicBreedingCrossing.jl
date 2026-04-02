@@ -21,6 +21,6 @@ include("sim_naive.jl")
 export simulate_naive
 
 include("sim_gebv.jl")
-export fit_gp_models, simulate_gebv
+export fit_gp_models, predict_gebvs, panmixis, simulate_gebv
 
 end

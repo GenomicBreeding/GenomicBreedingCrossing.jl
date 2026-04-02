@@ -1,3 +1,41 @@
+"""
+    simulate_naive(phenomes::Phenomes; i::Float64=0.1, ρ::Float64=0.5, 
+                   n_plants_per_cycle::Vector{Int64}=repeat([1_000], 5), 
+                   h²_realised::Float64=0.5, selection_direction_to_the_right::Bool=true,
+                   verbose::Bool=true)::BreedingPopulations
+
+Simulate naive (phenotypic) breeding selection across multiple cycles.
+
+This function models the response to selection in a breeding population using phenotypic selection.
+It tracks the distribution of traits across selection cycles, accounting for heritability and 
+selection efficiency.
+
+# Arguments
+- `phenomes::Phenomes`: The phenotypic data containing trait values for all individuals
+- `i::Float64`: Selection intensity (proportion of individuals selected), default 0.1 (top 10%)
+- `ρ::Float64`: Selection efficiency (0-1), accounting for accuracy of phenotyping/prediction, default 0.5
+- `n_plants_per_cycle::Vector{Int64}`: Number of plants selected per cycle, default 1000 per cycle
+- `h²_realised::Float64`: Realized heritability (0-1), default 0.5
+- `selection_direction_to_the_right::Bool`: Direction of selection; true for maximization, false for minimization, default true
+- `verbose::Bool`: Print progress and plot results, default true
+
+# Returns
+- `BreedingPopulations`: A structure containing distributions and selections for each trait across cycles
+
+# Examples
+```jldoctest; :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true);
+
+julia> bp_0 = simulate_naive(phenomes, n_plants_per_cycle=repeat([1_000], 5), verbose=false);
+
+julia> bp_1 = simulate_naive(phenomes, n_plants_per_cycle=repeat([1_000], 5), ρ=1.00, h²_realised=1.00, verbose=false);
+
+julia> bp_2 = simulate_naive(phenomes, n_plants_per_cycle=repeat([1_000], 5), ρ=0.50, h²_realised=0.20, verbose=false);
+
+julia> mean(bp_1.distributions[end]) > mean(bp_0.distributions[end]) > mean(bp_2.distributions[end])
+true
+```
+"""
 function simulate_naive(
     phenomes::Phenomes;
     i::Float64 = 0.1, # selection intensity
