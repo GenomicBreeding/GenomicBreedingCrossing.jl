@@ -37,7 +37,7 @@ url = "https://github.com/GenomicBreeding/GenomicBreedingModels.jl"
 
 [compat]
 CSV = "0.10.16"
-CairoMakie = "0.14.0"
+CairoMakie = "0.14.0, 0.15"
 ColorSchemes = "3.31.0"
 DataFrames = "1.8.1"
 Dates = "1.11.0"
