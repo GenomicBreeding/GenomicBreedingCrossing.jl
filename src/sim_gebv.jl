@@ -25,8 +25,8 @@ For each trait in the phenomes, the function:
 4. Optionally saves results after each trait is processed.
 
 # Example
-```jldoctest; :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
-julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true);
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
 
@@ -43,14 +43,16 @@ function fit_gp_models(
     GB_model::Function = GenomicBreedingModels.bayesa,
     save::Bool = true,
     verbose::Bool = true,
-)::Tuple{Dict{String,Fit}, String}
-    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true); GB_model::Function = GenomicBreedingModels.ols; save::Bool = true; verbose::Bool = true
+)::Tuple{Dict{String,Fit},String}
+    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); GB_model::Function = GenomicBreedingModels.ols; save::Bool = true; verbose::Bool = true
     fits = Dict()
     fname_fits_jld2 = save ? "fits-$(string(nameof(GB_model)))-$(Dates.now()).jld2" : ""
     for trait in phenomes.traits
         # trait = phenomes.traits[1]
         if verbose
-            println("Fitting \"$(nameof(GB_model))\" model on \"$trait\" and saving as \"$fname_fits_jld2\"")
+            println(
+                "Fitting \"$(nameof(GB_model))\" model on \"$trait\" and saving as \"$fname_fits_jld2\"",
+            )
         end
         G, P = begin
             idx_traits = findall(phenomes.traits .== trait)
@@ -59,7 +61,7 @@ function fit_gp_models(
             P = slice(phenomes, idx_entries = idx_entries, idx_traits = idx_traits)
             merge(genomes, P)
         end
-        fit = GB_model(genomes = G, phenomes = P, verbose=verbose)
+        fit = GB_model(genomes = G, phenomes = P, verbose = verbose)
         fits[trait] = fit
         if save
             # Save per trait in case we fail mid-loop
@@ -90,8 +92,8 @@ are computed using the provided fitted model via `GenomicBreedingModels.predict(
 information are inherited from the input `genomes` object.
 
 # Example
-```jldoctest; :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
-julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true);
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
 
@@ -116,7 +118,7 @@ function predict_gebvs(
     genomes::Genomes;
     idx_entries::Union{Nothing,Vector{Int64}} = nothing,
 )::Phenomes
-    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true); fits, _ = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols); fit = fits["trait_1"]; idx_entries = nothing
+    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); fits, _ = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols); fit = fits["trait_1"]; idx_entries = nothing
     idx_entries = if isnothing(idx_entries)
         collect(1:length(genomes.entries))
     else
@@ -163,8 +165,8 @@ parent pairs.
   - Assigned population name
 
 # Examples
-```jldoctest; :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
-julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true);
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> genomes_panmictic = panmixis(genomes, population_name="random_mated");
 
@@ -188,10 +190,10 @@ function panmixis(
     else
         Int64.(idx_entries)
     end
-    idx_0 = sample(idx_entries, n, replace=true)
-    idx_1 = sample(idx_entries, n, replace=true)
+    idx_0 = sample(idx_entries, n, replace = true)
+    idx_1 = sample(idx_entries, n, replace = true)
     progenies = Genomes(n = n, p = length(genomes.loci_alleles))
-    ids = [uuid4(rng) for i in 1:n]
+    ids = [uuid4(rng) for i = 1:n]
     progenies.entries = string.("entry-", ids)
     progenies.populations .= population_name
     progenies.loci_alleles = genomes.loci_alleles
@@ -219,7 +221,7 @@ end
         seed::Int64 = 42,
     )::BreedingPopulations
 
-Simulate genomic estimated breeding values (GEBV) through multiple selection cycles.
+Simulate genomic estimated breeding values (GEBV) through multiple selection cycles using pre-computed genomic prediction model/s.
 
 This function performs iterative selection and breeding cycles for multiple traits. In each cycle,
 individuals are selected based on predicted GEBVs, and a new population is generated through panmixis.
@@ -247,16 +249,16 @@ For each trait:
 5. Phenotypic distributions are tracked at each stage.
 
 # Example
-```jldoctest; :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
-julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true);
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
 
 julia> bp_0 = simulate_gebv(genomes, phenomes, fits, verbose=false);
 
-julia> bp_1 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.05);
+julia> bp_1 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.05, verbose=false);
 
-julia> bp_1 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.95, verbose=false);
+julia> bp_2 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.95, verbose=false);
 
 julia> mean(bp_1.distributions[end]) >= mean(bp_0.distributions[end]) > mean(bp_2.distributions[end])
 true
@@ -268,16 +270,21 @@ true
 function simulate_gebv(
     genomes::Genomes,
     phenomes::Phenomes,
-    fits::Dict{String, Fit};
+    fits::Dict{String,Fit};
     n_cycles::Int64 = 3,
     population_size::Int64 = 1_000,
     selection_intensity::Float64 = 0.1,
     verbose::Bool = true,
     seed::Int64 = 42,
 )::BreedingPopulations
-    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true); fits, _fname_fits_jld2 = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols); n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
-    bp, _ = BreedingPopulations(n_cycles=n_cycles, n_traits=length(phenomes.traits))
-    pb = verbose ? ProgressMeter.Progress(length(phenomes.traits)*n_cycles, "Simulating intra-population improvement") : nothing
+    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); fits, _fname_fits_jld2 = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols); n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
+    bp, _ = BreedingPopulations(n_cycles = n_cycles, n_traits = length(phenomes.traits))
+    pb =
+        verbose ?
+        ProgressMeter.Progress(
+            length(phenomes.traits)*n_cycles,
+            "Simulating intra-population improvement",
+        ) : nothing
     for (j, trait) in enumerate(phenomes.traits)
         # j = 1; trait = phenomes.traits[j]
         fit = fits[trait]
@@ -293,7 +300,10 @@ function simulate_gebv(
                 s = Int64(ceil(selection_intensity * n))
                 idx[1:s]
             end
-            bp.selections[t, j] = Normal(mean(P.phenotypes[idx_entries, 1]), std(P.phenotypes[idx_entries, 1]))
+            bp.selections[t, j] = Normal(
+                mean(P.phenotypes[idx_entries, 1]),
+                std(P.phenotypes[idx_entries, 1]),
+            )
             selected_G = slice(G, idx_entries = idx_entries)
             G = panmixis(
                 selected_G,
@@ -302,7 +312,8 @@ function simulate_gebv(
                 seed = seed,
             )
             P = predict_gebvs(fit, G)
-            bp.distributions[t+1, j] = Normal(mean(P.phenotypes[:, 1]), std(P.phenotypes[:, 1]))
+            bp.distributions[t+1, j] =
+                Normal(mean(P.phenotypes[:, 1]), std(P.phenotypes[:, 1]))
             verbose ? ProgressMeter.next!(pb) : nothing
         end
         # If we were select on the final cycle just for completeness and balancedness of the BreedingPopulations struct
@@ -312,7 +323,8 @@ function simulate_gebv(
             s = Int64(ceil(selection_intensity * n))
             idx[1:s]
         end
-        bp.selections[n_cycles+1, j] = Normal(mean(P.phenotypes[idx_entries, 1]), std(P.phenotypes[idx_entries, 1]))
+        bp.selections[n_cycles+1, j] =
+            Normal(mean(P.phenotypes[idx_entries, 1]), std(P.phenotypes[idx_entries, 1]))
     end
     if verbose
         ProgressMeter.finish!(pb)
@@ -322,7 +334,59 @@ function simulate_gebv(
     bp
 end
 
+"""
+    simulate_gebv(
+        genomes::Genomes, 
+        phenomes::Phenomes; 
+        GB_model::Function = GenomicBreedingModels.bayesa, 
+        n_cycles::Int64 = 3, 
+        population_size::Int64 = 1_000, 
+        selection_intensity::Float64 = 0.1, 
+        save::Bool = true, 
+        verbose::Bool = true, 
+        seed::Int64 = 42
+    )::BreedingPopulations
 
+Simulate genomic estimated breeding values (GEBV) through multiple selection cycles.
+
+This function performs iterative selection and breeding cycles for multiple traits. In each cycle,
+individuals are selected based on predicted GEBVs, and a new population is generated through panmixis.
+Selection intensity determines the proportion of top individuals selected in each cycle.
+
+# Arguments
+- `genomes::Genomes`: Genomic data for the population.
+- `phenomes::Phenomes`: Phenotypic data for the population.
+- `GB_model::Function`: Genomic breeding model to use for predictions (default: `GenomicBreedingModels.bayesa`).
+- `n_cycles::Int64`: Number of selection cycles to simulate (default: 3).
+- `population_size::Int64`: Size of the population in each cycle (default: 1,000).
+- `selection_intensity::Float64`: Intensity of selection applied (default: 0.1).
+- `save::Bool`: Whether to save results to disk (default: true).
+- `verbose::Bool`: Whether to print progress information (default: true).
+- `seed::Int64`: Random seed for reproducibility (default: 42).
+
+# Returns
+- `BreedingPopulations`: A breeding population object containing the results of the simulation across all cycles.
+
+# Details
+This function first fits genomic prediction models using the specified model function, then simulates the breeding population through multiple selection cycles based on the estimated breeding values.
+
+# Example
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
+
+julia> bp_0 = simulate_gebv(genomes, phenomes, verbose=false);
+
+julia> bp_1 = simulate_gebv(genomes, phenomes, selection_intensity=0.05, verbose=false);
+
+julia> bp_2 = simulate_gebv(genomes, phenomes, selection_intensity=0.95, verbose=false);
+
+julia> mean(bp_1.distributions[end]) >= mean(bp_0.distributions[end]) > mean(bp_2.distributions[end])
+true
+
+julia> var(bp_1.distributions[end]) < var(bp_0.distributions[end]) < var(bp_2.distributions[end])
+true
+```
+"""
 function simulate_gebv(
     genomes::Genomes,
     phenomes::Phenomes;
@@ -334,22 +398,22 @@ function simulate_gebv(
     verbose::Bool = true,
     seed::Int64 = 42,
 )::BreedingPopulations
-    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true); GB_model::Function = GenomicBreedingModels.ols; n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
+    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); GB_model::Function = GenomicBreedingModels.ols; n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
     fits, fname_fits_jld2 = fit_gp_models(
         genomes,
         phenomes,
-        GB_model=GB_model,
-        save=save,
-        verbose=verbose,
+        GB_model = GB_model,
+        save = save,
+        verbose = verbose,
     )
     simulate_gebv(
         genomes,
         phenomes,
         fits;
-        n_cycles=n_cycles,
-        population_size=population_size,
-        selection_intensity=selection_intensity,
-        verbose=verbose,
-        seed=seed,
+        n_cycles = n_cycles,
+        population_size = population_size,
+        selection_intensity = selection_intensity,
+        verbose = verbose,
+        seed = seed,
     )
 end

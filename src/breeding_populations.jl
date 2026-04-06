@@ -8,29 +8,29 @@ mutable struct BreedingPopulations
         n_traits::Int64 = 3,
         simulate_genomes_phenomes::Bool = false,
         verbose::Bool = true,
-    )::Tuple{BreedingPopulations, Union{Nothing, Tuple{Genomes, Phenomes}}}
+    )::Tuple{BreedingPopulations,Union{Nothing,Tuple{Genomes,Phenomes}}}
         # n_cycles=5; n_traits=3; simulate_genomes_phenomes=false; verbose=false
         cycles::Vector{Int64} = collect(0:n_cycles)
         traits::Vector{String} = ["trait_$i" for i = 1:n_traits]
-        distributions::Matrix{Distribution} = reshape(
-            repeat([Normal()], (n_cycles + 1) * n_traits),
-            (n_cycles + 1),
-            n_traits,
-        )
-        selections::Matrix{Distribution} = reshape(
-            repeat([Normal()], (n_cycles + 1) * n_traits),
-            (n_cycles + 1),
-            n_traits,
-        )
+        distributions::Matrix{Distribution} =
+            reshape(repeat([Normal()], (n_cycles + 1) * n_traits), (n_cycles + 1), n_traits)
+        selections::Matrix{Distribution} =
+            reshape(repeat([Normal()], (n_cycles + 1) * n_traits), (n_cycles + 1), n_traits)
         if !simulate_genomes_phenomes
-            return (
-                new(cycles, traits, distributions, selections),
-                nothing
-            )
+            return (new(cycles, traits, distributions, selections), nothing)
         else
             # Random unique contents
-            genomes = simulategenomes(verbose=verbose)
-            trials, _ = simulatetrials(genomes=genomes, n_years=1, n_seasons=1, n_harvests=1, n_sites=1, n_replications=1, sparsity=0.10,verbose=verbose)
+            genomes = simulategenomes(verbose = verbose)
+            trials, _ = simulatetrials(
+                genomes = genomes,
+                n_years = 1,
+                n_seasons = 1,
+                n_harvests = 1,
+                n_sites = 1,
+                n_replications = 1,
+                sparsity = 0.10,
+                verbose = verbose,
+            )
             phenomes = extractphenomes(trials)
             for i = 1:(n_cycles+1)
                 for j = 1:n_traits
@@ -48,10 +48,7 @@ mutable struct BreedingPopulations
                     selections[i, j] = truncated(Normal(μ, σ), 1.75 * μ, Inf)
                 end
             end
-            return (
-                new(cycles, traits, distributions, selections),
-                (genomes, phenomes)
-            )
+            return (new(cycles, traits, distributions, selections), (genomes, phenomes))
         end
     end
 end
@@ -180,4 +177,3 @@ function plot_and_save(
     CairoMakie.save(fname_svg, fig)
     fname_svg
 end
-
