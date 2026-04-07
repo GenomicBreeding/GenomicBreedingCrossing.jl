@@ -310,7 +310,7 @@ function simulate_gebv(
                 n = population_size,
                 population_name = "cycle_$t",
                 seed = seed,
-            )
+            ) # I don't feel like keeping these simulated genotypes --> they're costly memory-wise and their summary stats should suffice for our purposes.
             P = predict_gebvs(fit, G)
             bp.distributions[t+1, j] =
                 Normal(mean(P.phenotypes[:, 1]), std(P.phenotypes[:, 1]))
@@ -374,11 +374,11 @@ This function first fits genomic prediction models using the specified model fun
 ```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
-julia> bp_0 = simulate_gebv(genomes, phenomes, verbose=false);
+julia> bp_0 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, verbose=false);
 
-julia> bp_1 = simulate_gebv(genomes, phenomes, selection_intensity=0.05, verbose=false);
+julia> bp_1 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.05, verbose=false);
 
-julia> bp_2 = simulate_gebv(genomes, phenomes, selection_intensity=0.95, verbose=false);
+julia> bp_2 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.95, verbose=false);
 
 julia> mean(bp_1.distributions[end]) >= mean(bp_0.distributions[end]) > mean(bp_2.distributions[end])
 true
