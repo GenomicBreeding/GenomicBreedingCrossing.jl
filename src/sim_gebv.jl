@@ -97,7 +97,7 @@ julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=tr
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
 
-julia> fit = first(sort(fits)).second;
+julia> fit = fits[sort(string.(keys(fits)))[1]];
 
 julia> phenomes_predicted = predict_gebvs(fit, genomes);
 
