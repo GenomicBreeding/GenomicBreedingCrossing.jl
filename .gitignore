@@ -29,3 +29,5 @@ JuliaLocalPreferences.toml
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+*.jld2
