@@ -16,6 +16,7 @@ GenomicBreedingIO = "f6f5bf5f-7369-4de1-9a2f-51e3ce5e0754"
 GenomicBreedingModels = "a21a2f6e-06ad-4936-9990-fa46b058b9d4"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -23,17 +24,10 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
-[sources.GenomicBreedingCore]
-rev = "main"
-url = "https://github.com/GenomicBreeding/GenomicBreedingCore.jl"
-
-[sources.GenomicBreedingIO]
-rev = "main"
-url = "https://github.com/GenomicBreeding/GenomicBreedingIO.jl"
-
-[sources.GenomicBreedingModels]
-rev = "main"
-url = "https://github.com/GenomicBreeding/GenomicBreedingModels.jl"
+[sources]
+GenomicBreedingCore = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingCore.jl"}
+GenomicBreedingIO = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingIO.jl"}
+GenomicBreedingModels = {rev = "main", url = "https://github.com/GenomicBreeding/GenomicBreedingModels.jl"}
 
 [compat]
 CSV = "0.10.16"
@@ -48,6 +42,7 @@ GenomicBreedingIO = "0.2.0"
 GenomicBreedingModels = "0.2.0"
 JLD2 = "0.5.15, 0.6"
 JuliaFormatter = "2.3.0"
+LinearAlgebra = "1.12.0"
 MultivariateStats = "0.10.4"
 ProgressMeter = "1.11.0"
 Random = "1.11.0"

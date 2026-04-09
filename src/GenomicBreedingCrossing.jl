@@ -9,6 +9,7 @@ using Random,
     Distributions,
     UnicodePlots,
     MultivariateStats,
+    LinearAlgebra,
     JLD2,
     CSV,
     ProgressMeter
@@ -22,5 +23,8 @@ export simulate_naive
 
 include("sim_gebv.jl")
 export fit_gp_models, predict_gebvs, panmixis, simulate_gebv
+
+include("optim.jl")
+# export ...
 
 end

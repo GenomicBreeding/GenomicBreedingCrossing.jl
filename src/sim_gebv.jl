@@ -140,7 +140,7 @@ end
 """
     panmixis(genomes::Genomes; idx_entries::Union{Nothing,Vector{Int64}} = nothing, 
              population_name::String = "", n::Int64 = 1_000, seed::Int64 = 42, 
-             verbose::Bool = false)::Genomes
+             ϵ::Float64 = 0.001, verbose::Bool = false)::Genomes
 
 Simulate random mating (panmixis) of a population to generate progeny genomes.
 
@@ -154,7 +154,10 @@ parent pairs.
   If `nothing`, all individuals in `genomes` are used. Default: `nothing`
 - `population_name::String`: Name to assign to the progeny population. Default: `""`
 - `n::Int64`: Number of progeny to generate. Default: `1_000`
+- `simple_mating_model::Bool`: Use the simplistic allele frequency mean crossing model, otherwise
+   simulate linkage disequillibrium for use in sampling from a multivariate normal distribution. Default: `false`
 - `seed::Int64`: Random seed for reproducibility. Default: `42`
+- `ϵ::Float64`: Value used for the diagonal inflation of the LD/covariance matrix, i.e. when `simple_mating_model=false`. Default: `0.001`
 - `verbose::Bool`: If `true`, display progress bar during simulation. Default: `false`
 
 # Returns
@@ -179,10 +182,12 @@ function panmixis(
     idx_entries::Union{Nothing,Vector{Int64}} = nothing,
     population_name::String = "",
     n::Int64 = 1_000,
+    simple_mating_model::Bool = false,
     seed::Int64 = 42,
+    ϵ::Float64 = 0.001,
     verbose::Bool = false,
 )::Genomes
-    # genomes=GenomicBreedingCore.simulategenomes(n=119, l=10_000); idx_entries=nothing; population_name::String = ""; n=1_000; seed=42
+    # genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000); idx_entries=nothing; population_name::String = ""; n=1_000; simple_mating_model=false; seed=42; ϵ = 0.001; verbose = true
     Random.seed!(seed)
     rng = Xoshiro(seed)
     idx_entries = if isnothing(idx_entries)
@@ -197,14 +202,57 @@ function panmixis(
     progenies.entries = string.("entry-", ids)
     progenies.populations .= population_name
     progenies.loci_alleles = genomes.loci_alleles
-    pb = verbose ? ProgressMeter.Progress(n, "Simulating random mating") : nothing
-    for (i, (j, k)) in enumerate(zip(idx_0, idx_1))
-        # i = 1; j = idx_0[i]; k = idx_1[i]
-        progenies.allele_frequencies[i, :] =
-            (genomes.allele_frequencies[j, :] .+ genomes.allele_frequencies[k, :]) ./ 2
-        verbose ? ProgressMeter.next!(pb) : nothing
+    if simple_mating_model
+        # Very simplistic approach assuming genotypes are pools and LD is absent!
+        pb = verbose ? ProgressMeter.Progress(n, "Simulating random mating") : nothing
+        for (i, (j, k)) in enumerate(zip(idx_0, idx_1))
+            # i = 1; j = idx_0[i]; k = idx_1[i]
+            progenies.allele_frequencies[i, :] =
+                (genomes.allele_frequencies[j, :] .+ genomes.allele_frequencies[k, :]) ./ 2
+            verbose ? ProgressMeter.next!(pb) : nothing
+        end
+        verbose ? ProgressMeter.finish!(pb) : nothing
+    else
+        verbose ? println("Simulating random mating") : nothing
+        verbose ? println("Estimating LD") : nothing
+        # Estimate linkage disequillibrium 
+        Σ = cov(genomes.allele_frequencies)
+        verbose ? println("Making sure the LD matrix is positive semi-definite") : nothing
+        # Set the variance/covariance of fixed loci to zero
+        Σ[isinf.(Σ)] .= 0.0
+        Σ[isnan.(Σ)] .= 0.0
+        counter = 0
+        while !isposdef(Σ) && (counter < 10)
+            Σ[diagind(Σ)] .+= ϵ
+            counter += 1
+        end
+        if !isposdef(Σ)
+            throw(
+                ErrorException(
+                    "Uggghhhh... Cannot estimate the LD matrix! Send me an email to implement a proper fix for this. Sorry :-(",
+                ),
+            )
+        end
+        verbose ? println("Extracting allele frequency means") : nothing
+        μ = Float64.(mean(genomes.allele_frequencies, dims = 1)[1, :])
+        verbose ?
+        println(
+            "Defining the multivariate distribution using the means of allele frequencies and LD matrix",
+        ) : nothing
+        D = Distributions.MvNormal(μ, Σ)
+        verbose ? println("Sampling new genotypes from the multivariate distribution") :
+        nothing
+        G = Matrix(rand(rng, D, n)')
+        verbose ? println("Mapping the sampled values into the zero to one range") : nothing
+        G[G .< 0.0] .= 0.0
+        G[G .> 1.0] .= 1.0
+        progenies.allele_frequencies = G
+        # if verbose
+        #     # Commenting these out as correlation computations can be very expensive
+        #     display(UnicodePlots.heatmap(first(values(dist)), title="Parents' LD matrix"))
+        #     display(UnicodePlots.heatmap(cor(G), title="Progenies' LD matrix"))
+        # end
     end
-    verbose ? ProgressMeter.finish!(pb) : nothing
     @assert checkdims(progenies) # TODO: emit a better more specific error message here
     progenies
 end
@@ -217,6 +265,7 @@ end
         n_cycles::Int64 = 3,
         population_size::Int64 = 1_000,
         selection_intensity::Float64 = 0.1,
+        simple_mating_model::Bool = false,
         verbose::Bool = true,
         seed::Int64 = 42,
     )::BreedingPopulations
@@ -234,7 +283,9 @@ Selection intensity determines the proportion of top individuals selected in eac
 - `n_cycles::Int64 = 3`: Number of selection cycles to perform.
 - `population_size::Int64 = 1_000`: Size of the population generated after each selection.
 - `selection_intensity::Float64 = 0.1`: Proportion of top individuals to select (0.0 to 1.0).
-- `verbose::Bool = true`: Whether to display progress meter during simulation.
+- `simple_mating_model::Bool`: Use the simplistic allele frequency mean crossing model, otherwise
+   simulate linkage disequillibrium for use in sampling from a multivariate normal distribution. Default: `false`
+- `verbose::Bool`: Whether to display progress meter during simulation. Default: `true`
 - `seed::Int64 = 42`: Random seed for reproducibility in panmixis operations.
 
 # Returns
@@ -254,16 +305,16 @@ julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=tr
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
 
-julia> bp_0 = simulate_gebv(genomes, phenomes, fits, verbose=false);
+julia> bp_05 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.05, verbose=false);
 
-julia> bp_1 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.05, verbose=false);
+julia> bp_10 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.10, verbose=false);
 
-julia> bp_2 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.95, verbose=false);
+julia> bp_95 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.95, verbose=false);
 
-julia> mean(bp_1.distributions[end]) >= mean(bp_0.distributions[end]) > mean(bp_2.distributions[end])
+julia> mean(bp_05.distributions[end]) > mean(bp_10.distributions[end]) > mean(bp_95.distributions[end])
 true
 
-julia> var(bp_1.distributions[end]) < var(bp_0.distributions[end]) < var(bp_2.distributions[end])
+julia> var(bp_05.distributions[end]) < var(bp_10.distributions[end]) < var(bp_95.distributions[end])
 true
 ```
 """
@@ -274,6 +325,7 @@ function simulate_gebv(
     n_cycles::Int64 = 3,
     population_size::Int64 = 1_000,
     selection_intensity::Float64 = 0.1,
+    simple_mating_model::Bool = false,
     verbose::Bool = true,
     seed::Int64 = 42,
 )::BreedingPopulations
@@ -309,6 +361,7 @@ function simulate_gebv(
                 selected_G,
                 n = population_size,
                 population_name = "cycle_$t",
+                simple_mating_model = simple_mating_model,
                 seed = seed,
             ) # I don't feel like keeping these simulated genotypes --> they're costly memory-wise and their summary stats should suffice for our purposes.
             P = predict_gebvs(fit, G)
@@ -342,6 +395,7 @@ end
         n_cycles::Int64 = 3, 
         population_size::Int64 = 1_000, 
         selection_intensity::Float64 = 0.1, 
+        simple_mating_model::Bool = false,
         save::Bool = true, 
         verbose::Bool = true, 
         seed::Int64 = 42
@@ -356,13 +410,15 @@ Selection intensity determines the proportion of top individuals selected in eac
 # Arguments
 - `genomes::Genomes`: Genomic data for the population.
 - `phenomes::Phenomes`: Phenotypic data for the population.
-- `GB_model::Function`: Genomic breeding model to use for predictions (default: `GenomicBreedingModels.bayesa`).
-- `n_cycles::Int64`: Number of selection cycles to simulate (default: 3).
-- `population_size::Int64`: Size of the population in each cycle (default: 1,000).
-- `selection_intensity::Float64`: Intensity of selection applied (default: 0.1).
-- `save::Bool`: Whether to save results to disk (default: true).
-- `verbose::Bool`: Whether to print progress information (default: true).
-- `seed::Int64`: Random seed for reproducibility (default: 42).
+- `GB_model::Function`: Genomic breeding model to use for predictions. Default: `GenomicBreedingModels.bayesa`
+- `n_cycles::Int64`: Number of selection cycles to simulate. Default: `3`
+- `population_size::Int64`: Size of the population in each cycle. Default: `1_000`
+- `selection_intensity::Float64`: Intensity of selection applied. Default: `0.1`
+- `simple_mating_model::Bool`: Use the simplistic allele frequency mean crossing model, otherwise
+   simulate linkage disequillibrium for use in sampling from a multivariate normal distribution. Default: `false`
+- `save::Bool`: Whether to save results to disk. Default: `true`
+- `verbose::Bool`: Whether to print progress information. Default: `true`
+- `seed::Int64`: Random seed for reproducibility. Default: `42`
 
 # Returns
 - `BreedingPopulations`: A breeding population object containing the results of the simulation across all cycles.
@@ -394,6 +450,7 @@ function simulate_gebv(
     n_cycles::Int64 = 3,
     population_size::Int64 = 1_000,
     selection_intensity::Float64 = 0.1,
+    simple_mating_model::Bool = false,
     save::Bool = true,
     verbose::Bool = true,
     seed::Int64 = 42,
@@ -413,6 +470,7 @@ function simulate_gebv(
         n_cycles = n_cycles,
         population_size = population_size,
         selection_intensity = selection_intensity,
+        simple_mating_model = simple_mating_model,
         verbose = verbose,
         seed = seed,
     )

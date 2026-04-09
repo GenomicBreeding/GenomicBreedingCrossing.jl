@@ -10,6 +10,7 @@ using Random,
     Distributions,
     UnicodePlots,
     MultivariateStats,
+    LinearAlgebra,
     JLD2,
     CSV,
     ProgressMeter
