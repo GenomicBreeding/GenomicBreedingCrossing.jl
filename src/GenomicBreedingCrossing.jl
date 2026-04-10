@@ -21,8 +21,11 @@ export BreedingPopulations, check_populations, plot_simple, plot_and_save
 include("sim_naive.jl")
 export simulate_naive
 
+include("crossing.jl")
+export panmixis, paired_cross
+
 include("sim_gebv.jl")
-export fit_gp_models, predict_gebvs, panmixis, simulate_gebv
+export fit_gp_models, predict_gebvs, simulate_gebv
 
 include("optim.jl")
 # export ...
