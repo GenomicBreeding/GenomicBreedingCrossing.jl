@@ -160,11 +160,11 @@ function paired_cross(
     Σ::Union{Nothing,Matrix{Float64}} = nothing,
     population_name::String = "",
     n::Int64 = 1_000,
-    discrete_loci_alleles::Bool = false,
     seed::Int64 = 42,
     verbose::Bool = false,
 )::Genomes
-    # genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000); population_name::String = ""; n=1_000; discrete_loci_alleles=false; seed=42; verbose = true
+    # genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000); population_name::String = ""; n=1_000; seed=42; verbose = true
+    # genomes.allele_frequencies_homologous_chroms = 1.00 .- genomes.allele_frequencies
     # genomes_1 = slice(genomes, idx_entries=[1])
     # genomes_2 = slice(genomes, idx_entries=[2])
     # Σ = cov(genomes.allele_frequencies)
@@ -172,7 +172,7 @@ function paired_cross(
     # Σ[isnan.(Σ)] .= 0.0
     # counter = 0
     # while !isposdef(Σ) && (counter < 10)
-    #     Σ[diagind(Σ)] .+= ϵ
+    #     Σ[diagind(Σ)] .+= 0.001
     #     counter += 1
     # end
     ##############################################################
@@ -189,20 +189,23 @@ function paired_cross(
     Random.seed!(seed)
     rng = Xoshiro(seed)
     _, p = size(genomes_1.allele_frequencies)
-    Σ::Matrix{Float64} = if isnothing(Σ)
-        I = zeros(p, p)
-        I[diagind(i)] .= 1.00
-        I
-    else
-        Σ
-    end
-    μ = (genomes_1.allele_frequencies[1, :] .+ genomes_2.allele_frequencies[1, :]) ./ 2
-    verbose ?
-    println(
-        "Defining the multivariate distribution using the means of allele frequencies and LD matrix",
-    ) : nothing
-    D = Distributions.MvNormal(μ, Σ)
-    G = if discrete_loci_alleles
+    G = if isnothing(genomes_1.allele_frequencies_homologous_chroms) || isnothing(genomes_2.allele_frequencies_homologous_chroms)
+        ####################################
+        # Does not use phasing information #
+        ####################################
+        Σ::Matrix{Float64} = if isnothing(Σ)
+            I = zeros(p, p)
+            I[diagind(i)] .= 1.00
+            I
+        else
+            Σ
+        end
+        μ = (genomes_1.allele_frequencies[1, :] .+ genomes_2.allele_frequencies[1, :]) ./ 2
+        verbose ?
+        println(
+            "Defining the multivariate distribution using the means of allele frequencies and LD matrix",
+        ) : nothing
+        D = Distributions.MvNormal(μ, Σ)
         G = Matrix(rand(rng, D, n)')
         δ_1 = abs.(G .- genomes_1.allele_frequencies)
         δ_2 = abs.(G .- genomes_2.allele_frequencies)
@@ -215,7 +218,39 @@ function paired_cross(
         end
         G
     else
-        G = Matrix(rand(rng, D, n)')
+        ############################
+        # Uses phasing information #
+        ############################
+        # Instantiate the offspring genomes at the first locus-allele position
+        G = zeros(n, p)
+        G_homologous_chroms = 1.00 .- G
+        gametes_1 = sample(rng, [genomes_1.allele_frequencies[1, 1], genomes_1.allele_frequencies_homologous_chroms[1, 1]], n, replace=true)
+        gametes_2 = sample(rng, [genomes_2.allele_frequencies[1, 1], genomes_2.allele_frequencies_homologous_chroms[1, 1]], n, replace=true)
+        bool = rand(rng, n) .< 0.5
+        G[bool, 1] = gametes_1[bool]
+        G[.!bool, 1] = gametes_2[.!bool]
+        G_homologous_chroms[.!bool, 1] = gametes_1[.!bool]
+        G_homologous_chroms[bool, 1] = gametes_2[bool]
+            
+
+        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+
+        # Define the likelihood linkage per pair of loci
+        for j in 2:p
+            # j = 2
+            v_prev = Σ[(j-1),(j-1)]
+            v_curr = Σ[j,j]
+            corr = Σ[(j-1), j] / (sqrt(v_prev) * sqrt(v_curr))
+            idx_1 = G[:, j-1] .== genomes_1.allele_frequencies[:, j-1]
+            idx_2 = .!idx_1
+            χ = rand(rng, n)
+            G[:, j]
+            genomes_1.allele_frequencies_homologous_chroms[:, j]
+            Σ[:, j]
+        end
+        
     end
     progenies = Genomes(n = n, p = length(genomes_1.loci_alleles))
     ids = [uuid4(rng) for i = 1:n]
