@@ -44,8 +44,8 @@ function panmixis(
     population_name::String = "",
     n::Int64 = 1_000,
     simple_mating_model::Bool = false,
-    seed::Int64 = 42,
     ϵ::Float64 = 0.001,
+    seed::Int64 = 42,
     verbose::Bool = false,
 )::Genomes
     # genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000); idx_entries=nothing; population_name::String = ""; n=1_000; simple_mating_model=false; seed=42; ϵ = 0.001; verbose = true
@@ -126,6 +126,7 @@ end
         population_name::String = "",
         n::Int64 = 1_000,
         discrete_loci_alleles::Bool = false,
+        ϵ::Float64 = 0.001,
         seed::Int64 = 42,
         verbose::Bool = false
     )::Genomes
@@ -141,6 +142,7 @@ This function performs crossing between two specific parent genomes, creating pr
 - `population_name::String`: Name to assign to the progeny population. Default: `""`
 - `n::Int64`: Number of progeny to generate. Default: `1_000`
 - `discrete_loci_alleles::Bool`: If `true`, discretize allele frequencies to match parent values. Default: `false`
+- `ϵ::Float64`: Value used for the diagonal inflation of the LD/covariance matrix, i.e. when `simple_mating_model=false`. Default: `0.001`
 - `seed::Int64`: Random seed for reproducibility. Default: `42`
 - `verbose::Bool`: If `true`, print progress information. Default: `false`
 
@@ -150,8 +152,33 @@ This function performs crossing between two specific parent genomes, creating pr
 # Examples: TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
 
 ```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
-julia> true
+julia> genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000, verbose=false);
+
+julia> genomes_1 = slice(genomes, idx_entries=[1]);
+
+julia> genomes_2 = slice(genomes, idx_entries=[2]);
+
+julia> progenies = paired_cross(genomes_1, genomes_2, Σ=cov(genomes.allele_frequencies), n=123);
+
+julia> size(progenies.allele_frequencies)
+(123, 10000)
+
+julia> isnothing(progenies.allele_frequencies_homologous_chroms)
 true
+
+julia> genomes.allele_frequencies_homologous_chroms = 1.00 .- genomes.allele_frequencies;
+
+julia> genomes_1 = slice(genomes, idx_entries=[1]);
+
+julia> genomes_2 = slice(genomes, idx_entries=[2]);
+
+julia> progenies = paired_cross(genomes_1, genomes_2, Σ=cov(genomes.allele_frequencies), n=123);
+
+julia> size(progenies.allele_frequencies)
+(123, 10000)
+
+julia> isnothing(progenies.allele_frequencies_homologous_chroms)
+false
 ```
 """
 function paired_cross(
@@ -161,9 +188,10 @@ function paired_cross(
     population_name::String = "",
     n::Int64 = 1_000,
     seed::Int64 = 42,
+    ϵ::Float64 = 0.001,
     verbose::Bool = false,
 )::Genomes
-    # genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000); population_name::String = ""; n=1_000; seed=42; verbose = true
+    # genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000); population_name::String = ""; n=1_000; seed=42; ϵ::Float64 = 0.001; verbose = true
     # genomes.allele_frequencies_homologous_chroms = 1.00 .- genomes.allele_frequencies
     # genomes_1 = slice(genomes, idx_entries=[1])
     # genomes_2 = slice(genomes, idx_entries=[2])
@@ -172,7 +200,7 @@ function paired_cross(
     # Σ[isnan.(Σ)] .= 0.0
     # counter = 0
     # while !isposdef(Σ) && (counter < 10)
-    #     Σ[diagind(Σ)] .+= 0.001
+    #     Σ[diagind(Σ)] .+= ϵ
     #     counter += 1
     # end
     ##############################################################
@@ -189,79 +217,136 @@ function paired_cross(
     Random.seed!(seed)
     rng = Xoshiro(seed)
     _, p = size(genomes_1.allele_frequencies)
-    G = if isnothing(genomes_1.allele_frequencies_homologous_chroms) || isnothing(genomes_2.allele_frequencies_homologous_chroms)
-        ####################################
-        # Does not use phasing information #
-        ####################################
-        Σ::Matrix{Float64} = if isnothing(Σ)
-            I = zeros(p, p)
-            I[diagind(i)] .= 1.00
-            I
-        else
-            Σ
-        end
-        μ = (genomes_1.allele_frequencies[1, :] .+ genomes_2.allele_frequencies[1, :]) ./ 2
-        verbose ?
-        println(
-            "Defining the multivariate distribution using the means of allele frequencies and LD matrix",
-        ) : nothing
-        D = Distributions.MvNormal(μ, Σ)
-        G = Matrix(rand(rng, D, n)')
-        δ_1 = abs.(G .- genomes_1.allele_frequencies)
-        δ_2 = abs.(G .- genomes_2.allele_frequencies)
-        idx_1 = δ_1 .<= δ_2
-        idx_2 = δ_1 .> δ_2
-        for j = 1:p
-            # j = 1
-            G[idx_1[:, j], j] .= genomes_1.allele_frequencies[1, j]
-            G[idx_2[:, j], j] .= genomes_2.allele_frequencies[1, j]
-        end
-        G
+    Σ::Matrix{Float64} = if isnothing(Σ)
+        I = zeros(p, p)
+        I[diagind(i)] .= 1.00
+        I
     else
-        ############################
-        # Uses phasing information #
-        ############################
-        # Instantiate the offspring genomes at the first locus-allele position
-        G = zeros(n, p)
-        G_homologous_chroms = 1.00 .- G
-        gametes_1 = sample(rng, [genomes_1.allele_frequencies[1, 1], genomes_1.allele_frequencies_homologous_chroms[1, 1]], n, replace=true)
-        gametes_2 = sample(rng, [genomes_2.allele_frequencies[1, 1], genomes_2.allele_frequencies_homologous_chroms[1, 1]], n, replace=true)
-        bool = rand(rng, n) .< 0.5
-        G[bool, 1] = gametes_1[bool]
-        G[.!bool, 1] = gametes_2[.!bool]
-        G_homologous_chroms[.!bool, 1] = gametes_1[.!bool]
-        G_homologous_chroms[bool, 1] = gametes_2[bool]
-            
-
-        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-        # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-
-        # Define the likelihood linkage per pair of loci
-        for j in 2:p
-            # j = 2
-            v_prev = Σ[(j-1),(j-1)]
-            v_curr = Σ[j,j]
-            corr = Σ[(j-1), j] / (sqrt(v_prev) * sqrt(v_curr))
-            idx_1 = G[:, j-1] .== genomes_1.allele_frequencies[:, j-1]
-            idx_2 = .!idx_1
-            χ = rand(rng, n)
-            G[:, j]
-            genomes_1.allele_frequencies_homologous_chroms[:, j]
-            Σ[:, j]
-        end
-        
+        Σ
     end
+    (G_1, G_2) =
+        if isnothing(genomes_1.allele_frequencies_homologous_chroms) ||
+           isnothing(genomes_2.allele_frequencies_homologous_chroms)
+            ########################################
+            ### Does not use phasing information ###
+            ########################################
+            μ =
+                (genomes_1.allele_frequencies[1, :] .+ genomes_2.allele_frequencies[1, :]) ./
+                2
+            verbose ? println("Making sure the LD matrix is positive semi-definite") :
+            nothing
+            # Set the variance/covariance of fixed loci to zero
+            Σ[isinf.(Σ)] .= 0.0
+            Σ[isnan.(Σ)] .= 0.0
+            counter = 0
+            while !isposdef(Σ) && (counter < 10)
+                Σ[diagind(Σ)] .+= ϵ
+                counter += 1
+            end
+            if !isposdef(Σ)
+                throw(
+                    ErrorException(
+                        "Uggghhhh... Cannot estimate the LD matrix! Send me an email to implement a proper fix for this. Sorry :-(",
+                    ),
+                )
+            end
+            D = Distributions.MvNormal(μ, Σ)
+            G = Matrix(rand(rng, D, n)')
+            δ_1 = abs.(G .- genomes_1.allele_frequencies)
+            δ_2 = abs.(G .- genomes_2.allele_frequencies)
+            idx_1 = δ_1 .<= δ_2
+            idx_2 = δ_1 .> δ_2
+            for j = 1:p
+                # j = 1
+                G[idx_1[:, j], j] .= genomes_1.allele_frequencies[1, j]
+                G[idx_2[:, j], j] .= genomes_2.allele_frequencies[1, j]
+            end
+            (G, nothing)
+        else
+            ################################
+            ### Uses phasing information ###
+            ################################
+            # Instantiate the offspring genomes at the first locus-allele position
+            G_1 = zeros(n, p)
+            G_2 = 1.00 .- G_1
+            G_1[:, 1] = sample(
+                rng,
+                [
+                    genomes_1.allele_frequencies[1, 1],
+                    genomes_1.allele_frequencies_homologous_chroms[1, 1],
+                ],
+                n,
+                replace = true,
+            )
+            G_2[:, 1] = sample(
+                rng,
+                [
+                    genomes_2.allele_frequencies[1, 1],
+                    genomes_2.allele_frequencies_homologous_chroms[1, 1],
+                ],
+                n,
+                replace = true,
+            )
+            # Define the likelihood linkage per pair of loci
+            for j = 2:p
+                # j = 2
+                v_prev = Σ[(j-1), (j-1)]
+                v_curr = Σ[j, j]
+                corr = Σ[(j-1), j] / (sqrt(v_prev) * sqrt(v_curr))
+                # From genomes_1, i.e. parent 1
+                let
+                    bool_linkage = rand(rng, n) .<= corr
+                    bool_homologue_A = G_1[:, j-1] .== genomes_1.allele_frequencies[1, j-1]
+                    bool_homologue_B =
+                        G_1[:, j-1] .==
+                        genomes_1.allele_frequencies_homologous_chroms[1, j-1]
+                    G_1[bool_homologue_A.&&bool_linkage, j] .=
+                        genomes_1.allele_frequencies[1, j]
+                    G_1[bool_homologue_B.&&bool_linkage, j] .=
+                        genomes_1.allele_frequencies_homologous_chroms[1, j]
+                    G_1[bool_homologue_A.&&.!bool_linkage, j] .=
+                        genomes_1.allele_frequencies_homologous_chroms[1, j]
+                    G_1[bool_homologue_B.&&.!bool_linkage, j] .= genomes_1.allele_frequencies[1, j]
+                    @assert n ==
+                            sum(bool_homologue_A .&& bool_linkage) +
+                            sum(bool_homologue_B .&& bool_linkage) +
+                            sum(bool_homologue_A .&& .!bool_linkage) +
+                            sum(bool_homologue_B .&& .!bool_linkage)
+                end
+                # From genomes_2, i.e. parent 2
+                let
+                    bool_linkage = rand(rng, n) .<= corr
+                    bool_homologue_A = G_2[:, j-1] .== genomes_2.allele_frequencies[1, j-1]
+                    bool_homologue_B =
+                        G_2[:, j-1] .==
+                        genomes_2.allele_frequencies_homologous_chroms[1, j-1]
+                    G_2[bool_homologue_A.&&bool_linkage, j] .=
+                        genomes_2.allele_frequencies[1, j]
+                    G_2[bool_homologue_B.&&bool_linkage, j] .=
+                        genomes_2.allele_frequencies_homologous_chroms[1, j]
+                    G_2[bool_homologue_A.&&.!bool_linkage, j] .=
+                        genomes_2.allele_frequencies_homologous_chroms[1, j]
+                    G_2[bool_homologue_B.&&.!bool_linkage, j] .= genomes_2.allele_frequencies[1, j]
+                    @assert n ==
+                            sum(bool_homologue_A .&& bool_linkage) +
+                            sum(bool_homologue_B .&& bool_linkage) +
+                            sum(bool_homologue_A .&& .!bool_linkage) +
+                            sum(bool_homologue_B .&& .!bool_linkage)
+                end
+            end
+            (G_1, G_2)
+        end
     progenies = Genomes(n = n, p = length(genomes_1.loci_alleles))
     ids = [uuid4(rng) for i = 1:n]
     progenies.entries = string.("entry-", ids)
     progenies.populations .= population_name
-    progenies.loci_alleles = genomes.loci_alleles
-    progenies.allele_frequencies = G
+    progenies.loci_alleles = genomes_1.loci_alleles
+    progenies.allele_frequencies = G_1
+    progenies.allele_frequencies_homologous_chroms = G_2
     # if verbose
     #     # Commenting these out as correlation computations can be very expensive
     #     display(UnicodePlots.heatmap(Σ, title="Parents' LD matrix"))
-    #     display(UnicodePlots.heatmap(cov(G), title="Progenies' LD matrix"))
+    #     display(UnicodePlots.heatmap(cov(G_1), title="Progenies' LD matrix"))
     # end
     @assert checkdims(progenies) # TODO: emit a better more specific error message here
     progenies

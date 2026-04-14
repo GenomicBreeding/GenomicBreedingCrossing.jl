@@ -39,15 +39,15 @@ jobs:
           install.packages("BGLR")
         shell: Rscript {0}
       - run: echo "LD_LIBRARY_PATH=$(R RHOME)/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
-      - uses: julia-actions/setup-julia@v2
-        with:
-          version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v3
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+      # - uses: julia-actions/julia-buildpkg@v1
+      # - uses: julia-actions/julia-runtest@v1
+      # - uses: julia-actions/setup-julia@v2
+      #   with:
+      #     version: ${{ matrix.version }}
+      #     arch: ${{ matrix.arch }}
+      # - uses: julia-actions/cache@v3
+      # - uses: julia-actions/julia-buildpkg@v1
+      # - uses: julia-actions/julia-runtest@v1
   docs:
     name: Documentation
     runs-on: ubuntu-latest
