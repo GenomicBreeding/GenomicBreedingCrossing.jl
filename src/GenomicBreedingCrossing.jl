@@ -28,6 +28,6 @@ include("sim_gebv.jl")
 export fit_gp_models, predict_gebvs, simulate_gebv
 
 include("optim.jl")
-# export ...
+export sim, rank_entries, two_way_cross_predictions
 
 end
