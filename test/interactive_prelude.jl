@@ -11,6 +11,7 @@ using Random,
     UnicodePlots,
     MultivariateStats,
     LinearAlgebra,
+    Combinatorics,
     JLD2,
     CSV,
     ProgressMeter

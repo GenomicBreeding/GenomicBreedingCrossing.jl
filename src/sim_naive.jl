@@ -23,7 +23,7 @@ selection efficiency.
 - `BreedingPopulations`: A structure containing distributions and selections for each trait across cycles
 
 # Examples
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> bp_0 = simulate_naive(phenomes, n_plants_per_cycle=repeat([1_000], 5), verbose=false);

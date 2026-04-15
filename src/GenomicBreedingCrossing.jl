@@ -10,6 +10,7 @@ using Random,
     UnicodePlots,
     MultivariateStats,
     LinearAlgebra,
+    Combinatorics,
     JLD2,
     CSV,
     ProgressMeter
@@ -28,6 +29,6 @@ include("sim_gebv.jl")
 export fit_gp_models, predict_gebvs, simulate_gebv
 
 include("optim.jl")
-export sim, rank_entries, two_way_cross_predictions
+export sim, rank_entries, two_way_cross_predictions, synthetic_predictions
 
 end

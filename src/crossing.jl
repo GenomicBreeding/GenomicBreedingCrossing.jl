@@ -29,7 +29,7 @@ parent pairs.
   - Assigned population name
 
 # Examples
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> genomes_panmictic = panmixis(genomes, population_name="random_mated");
@@ -151,7 +151,7 @@ This function performs crossing between two specific parent genomes, creating pr
 
 # Examples: TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
 
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000, verbose=false);
 
 julia> genomes_1 = slice(genomes, idx_entries=[1]);

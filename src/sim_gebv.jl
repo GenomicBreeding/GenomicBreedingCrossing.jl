@@ -25,7 +25,7 @@ For each trait in the phenomes, the function:
 4. Optionally saves results after each trait is processed.
 
 # Example
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
@@ -92,7 +92,7 @@ are computed using the provided fitted model via `GenomicBreedingModels.predict(
 information are inherited from the input `genomes` object.
 
 # Example
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
@@ -179,7 +179,7 @@ For each trait:
 5. Phenotypic distributions are tracked at each stage.
 
 # Example
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
@@ -306,7 +306,7 @@ Selection intensity determines the proportion of top individuals selected in eac
 This function first fits genomic prediction models using the specified model function, then simulates the breeding population through multiple selection cycles based on the estimated breeding values.
 
 # Example
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
 julia> bp_0 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, verbose=false);

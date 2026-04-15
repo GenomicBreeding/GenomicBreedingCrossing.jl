@@ -33,7 +33,7 @@ Trials are simulated across a single year, season, harvest, site, and replicatio
 See GenomicBreedingCore.jl documentation if you wish more fine-tuned simulations.
 
 # Examples
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> genomes, phenomes = sim(n=10, l=1_000);
 
 julia> size(genomes.allele_frequencies)
@@ -82,7 +82,7 @@ Rank genome entries based on phenotypic values for a specified trait in descendi
 - Missing values in the phenotype data are automatically filtered out before ranking.
 
 # Examples
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> genomes, phenomes = sim();
 
 julia> idx = rank_entries(genomes, phenomes, idx_trait=1);
@@ -148,7 +148,7 @@ resulting offspring populations.
   - `ϕ_var::Vector{Float64}`: Variance of GEBVs in offspring
 
 # Example
-```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames)
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> genomes, phenomes = sim();
 
 julia> df = two_way_cross_predictions(genomes, phenomes; idx_trait=1, n_parents=5, GB_model = GenomicBreedingModels.ols);
@@ -156,7 +156,6 @@ julia> df = two_way_cross_predictions(genomes, phenomes; idx_trait=1, n_parents=
 julia> size(df)
 (10, 6)
 ```
-
 """
 function two_way_cross_predictions(
     genomes::Genomes,
@@ -185,10 +184,8 @@ function two_way_cross_predictions(
     ϕ_max::Vector{Float64} = []
     ϕ_mean::Vector{Float64} = []
     ϕ_var::Vector{Float64} = []
-
     m = Int64(round((n_parents^2 - n_parents) / 2))
-    counter = 0
-
+    pb = verbose ? ProgressMeter.Progress(m, desc="Two-way cross predictions for $m pairs of the top-performing genotypes") : nothing
     for i = 1:(length(idx)-1)
         for j = (i+1):length(idx)
             # i = 1; j = 2
@@ -211,14 +208,119 @@ function two_way_cross_predictions(
             push!(ϕ_max, maximum(Φ.phenotypes[:, 1]))
             push!(ϕ_mean, mean(Φ.phenotypes[:, 1]))
             push!(ϕ_var, var(Φ.phenotypes[:, 1]))
-
-            counter += 1
-            verbose ? println("$counter/$m") : nothing
+            verbose ? ProgressMeter.next!(pb) : nothing
         end
     end
+    verbose ? ProgressMeter.finish!(pb) : nothing
     DataFrame(
         parent_1 = parent_1,
         parent_2 = parent_2,
+        ϕ_min = ϕ_min,
+        ϕ_max = ϕ_max,
+        ϕ_mean = ϕ_mean,
+        ϕ_var = ϕ_var,
+    )
+end
+
+"""
+    synthetic_predictions(genomes::Genomes, phenomes::Phenomes; 
+                         idx_trait::Int64=1, n_total_candidates::Int64=10, 
+                         n_parents_per_synthetic::Int64=5, n::Int64=1_000, 
+                         seed::Int64=42, ϵ::Float64=0.001, 
+                         GB_model::Function=GenomicBreedingModels.bayesa, 
+                         verbose::Bool=false)::DataFrame
+
+Generate predictions for synthetic crosses by evaluating all combinations of top-performing parental genotypes.
+
+# Arguments
+- `genomes::Genomes`: The genomic data containing allele frequencies and genotype information.
+- `phenomes::Phenomes`: The phenotypic data corresponding to the genomes.
+- `idx_trait::Int64=1`: Index of the trait to evaluate for parent selection.
+- `n_total_candidates::Int64=10`: Number of top-performing candidates to consider as potential parents.
+- `n_parents_per_synthetic::Int64=5`: Number of parents to combine in each synthetic cross.
+- `n::Int64=1_000`: Number of individuals to generate for each synthetic population.
+- `seed::Int64=42`: Random seed for reproducibility of synthetic population generation.
+- `ϵ::Float64=0.001`: Small tolerance parameter (currently unused).
+- `GB_model::Function=GenomicBreedingModels.bayesa`: Genomic breeding model function for GEBV prediction.
+- `verbose::Bool=false`: If true, display progress bar and additional information during execution.
+
+# Returns
+- `DataFrame`: A table with columns:
+  - `parents::Vector{String}`: Concatenated IDs of parent genotypes for each cross.
+  - `ϕ_min::Vector{Float64}`: Minimum predicted phenotypic value in the synthetic population.
+  - `ϕ_max::Vector{Float64}`: Maximum predicted phenotypic value in the synthetic population.
+  - `ϕ_mean::Vector{Float64}`: Mean predicted phenotypic value in the synthetic population.
+  - `ϕ_var::Vector{Float64}`: Variance of predicted phenotypic values in the synthetic population.
+
+# Description
+This function ranks genotypes based on phenotypic performance, selects the top candidates, 
+fits a predictive model, and evaluates all possible combinations of parent crosses using panmixis. 
+Genomic estimated breeding values (GEBVs) are predicted for each synthetic population.
+
+# Examples
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
+julia> genomes, phenomes = sim();
+
+julia> df = synthetic_predictions(genomes, phenomes; idx_trait=1, n_total_candidates=3, n_parents_per_synthetic=2, GB_model = GenomicBreedingModels.ols);
+
+julia> size(df)
+(3, 5)
+```
+"""
+function synthetic_predictions(
+    genomes::Genomes,
+    phenomes::Phenomes;
+    idx_trait::Int64 = 1,
+    n_total_candidates::Int64 = 10,
+    n_parents_per_synthetic::Int64 = 5,
+    n::Int64 = 1_000,
+    seed::Int64 = 42,
+    ϵ::Float64 = 0.001,
+    GB_model::Function = GenomicBreedingModels.bayesa,
+    verbose::Bool = false,
+)::DataFrame
+    # genomes, phenomes = sim(); idx_trait = 1; n_total_candidates::Int64 = 10; n_parents_per_synthetic::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
+    Σ = cov(genomes.allele_frequencies)
+    idx = rank_entries(genomes, phenomes, idx_trait = idx_trait)[1:n_total_candidates]
+    fits, _ = fit_gp_models(
+        genomes,
+        slice(phenomes, idx_entries = idx, idx_traits = [idx_trait]);
+        GB_model = GB_model,
+        save = false,
+        verbose = verbose,
+    )
+    idx_parents_combinations = collect(combinations(idx, n_parents_per_synthetic))
+    @show m = length(idx_parents_combinations)
+    parents::Vector{String} = []
+    ϕ_min::Vector{Float64} = []
+    ϕ_max::Vector{Float64} = []
+    ϕ_mean::Vector{Float64} = []
+    ϕ_var::Vector{Float64} = []
+    pb = verbose ? ProgressMeter.Progress(m, desc="Two-way cross predictions for $m pairs of the top-performing genotypes") : nothing
+    for idx_parents in idx_parents_combinations
+        # idx_parents = idx_parents_combinations[1]
+        id = join(genomes.entries[idx_parents], "▓")
+        Γ::Genomes = panmixis(
+            genomes, 
+            idx_entries=idx_parents, 
+            population_name=id,
+            n=n,
+            simple_mating_model=false,
+            ϵ=ϵ,
+            seed=seed,
+            verbose=false,
+        )
+        Φ::Phenomes = predict_gebvs(first(fits)[end], Γ)
+        push!(parents, id)
+        push!(ϕ_min, minimum(Φ.phenotypes[:, 1]))
+        push!(ϕ_max, maximum(Φ.phenotypes[:, 1]))
+        push!(ϕ_mean, mean(Φ.phenotypes[:, 1]))
+        push!(ϕ_var, var(Φ.phenotypes[:, 1]))
+        verbose ? ProgressMeter.next!(pb) : nothing
+    end
+    verbose ? ProgressMeter.finish!(pb) : nothing
+    DataFrame(
+        parents = parents,
         ϕ_min = ϕ_min,
         ϕ_max = ϕ_max,
         ϕ_mean = ϕ_mean,
