@@ -290,7 +290,7 @@ function synthetic_predictions(
         verbose = verbose,
     )
     idx_parents_combinations = collect(combinations(idx, n_parents_per_synthetic))
-    @show m = length(idx_parents_combinations)
+    m = length(idx_parents_combinations)
     parents::Vector{String} = []
     ϕ_min::Vector{Float64} = []
     ϕ_max::Vector{Float64} = []
