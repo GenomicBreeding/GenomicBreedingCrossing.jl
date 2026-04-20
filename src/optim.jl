@@ -379,7 +379,7 @@ Parallel processing is used via `Threads.@threads` for computational efficiency.
 ```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> genomes, phenomes = sim(n=20);
 
-julia> df = test_cross(genomes, phenomes);
+julia> df = test_cross(genomes, phenomes, GB_model = GenomicBreedingModels.ols);
 
 julia> size(df)
 (19, 6)
