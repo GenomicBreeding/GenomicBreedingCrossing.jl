@@ -1,9 +1,3 @@
-# Crossing optimisation
-# Finding the best set of genotypes to cross which will optimises for both:
-#   - improved trait/s and 
-#   - retain high genetic variation.
-
-
 """
     sim(;n::Int64=500, l::Int64=10_000)::Tuple{Genomes, Phenomes}
 
@@ -171,22 +165,30 @@ function two_way_cross_predictions(
     # genomes, phenomes = sim(); idx_trait = 1; n_parents::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
     Σ = cov(genomes.allele_frequencies)
     idx = rank_entries(genomes, phenomes, idx_trait = idx_trait)[1:n_parents]
-    fits, _ = fit_gp_models(
-        genomes,
-        slice(phenomes, idx_entries = idx, idx_traits = [idx_trait]);
-        GB_model = GB_model,
-        save = false,
-        verbose = verbose,
-    )
-    parent_1::Vector{String} = []
-    parent_2::Vector{String} = []
-    ϕ_min::Vector{Float64} = []
-    ϕ_max::Vector{Float64} = []
-    ϕ_mean::Vector{Float64} = []
-    ϕ_var::Vector{Float64} = []
+    fit = let
+        fits, _ = fit_gp_models(
+            genomes,
+            slice(phenomes, idx_entries = idx, idx_traits = [idx_trait]);
+            GB_model = GB_model,
+            save = false,
+            verbose = verbose,
+        )
+        fits[string.(keys(fits))[1]]
+    end
     m = Int64(round((n_parents^2 - n_parents) / 2))
-    pb = verbose ? ProgressMeter.Progress(m, desc="Two-way cross predictions for $m pairs of the top-performing genotypes") : nothing
-    for i = 1:(length(idx)-1)
+    parent_1::Vector{String} = repeat([""], m)
+    parent_2::Vector{String} = repeat([""], m)
+    ϕ_min::Vector{Float64} = repeat([NaN], m)
+    ϕ_max::Vector{Float64} = repeat([NaN], m)
+    ϕ_mean::Vector{Float64} = repeat([NaN], m)
+    ϕ_var::Vector{Float64} = repeat([NaN], m)
+    pb =
+        verbose ?
+        ProgressMeter.Progress(
+            m,
+            desc = "Two-way cross predictions for $m pairs of the top-performing genotypes",
+        ) : nothing
+    Threads.@threads for i = 1:(length(idx)-1)
         for j = (i+1):length(idx)
             # i = 1; j = 2
             genomes_1 = slice(genomes, idx_entries = [idx[i]])
@@ -201,13 +203,13 @@ function two_way_cross_predictions(
                 ϵ = ϵ,
                 verbose = false,
             )
-            Φ::Phenomes = predict_gebvs(first(fits)[end], Γ)
-            push!(parent_1, genomes_1.entries[1])
-            push!(parent_2, genomes_2.entries[1])
-            push!(ϕ_min, minimum(Φ.phenotypes[:, 1]))
-            push!(ϕ_max, maximum(Φ.phenotypes[:, 1]))
-            push!(ϕ_mean, mean(Φ.phenotypes[:, 1]))
-            push!(ϕ_var, var(Φ.phenotypes[:, 1]))
+            Φ::Phenomes = predict_gebvs(fit, Γ)
+            parent_1[i] = genomes_1.entries[1]
+            parent_2[i] = genomes_2.entries[1]
+            ϕ_min[i] = minimum(Φ.phenotypes[:, 1])
+            ϕ_max[i] = maximum(Φ.phenotypes[:, 1])
+            ϕ_mean[i] = mean(Φ.phenotypes[:, 1])
+            ϕ_var[i] = var(Φ.phenotypes[:, 1])
             verbose ? ProgressMeter.next!(pb) : nothing
         end
     end
@@ -280,47 +282,174 @@ function synthetic_predictions(
     verbose::Bool = false,
 )::DataFrame
     # genomes, phenomes = sim(); idx_trait = 1; n_total_candidates::Int64 = 10; n_parents_per_synthetic::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
-    Σ = cov(genomes.allele_frequencies)
     idx = rank_entries(genomes, phenomes, idx_trait = idx_trait)[1:n_total_candidates]
-    fits, _ = fit_gp_models(
-        genomes,
-        slice(phenomes, idx_entries = idx, idx_traits = [idx_trait]);
-        GB_model = GB_model,
-        save = false,
-        verbose = verbose,
-    )
+    fit = let
+        fits, _ = fit_gp_models(
+            genomes,
+            slice(phenomes, idx_traits = [idx_trait]);
+            GB_model = GB_model,
+            save = false,
+            verbose = verbose,
+        )
+        fits[string.(keys(fits))[1]]
+    end
     idx_parents_combinations = collect(combinations(idx, n_parents_per_synthetic))
     m = length(idx_parents_combinations)
-    parents::Vector{String} = []
-    ϕ_min::Vector{Float64} = []
-    ϕ_max::Vector{Float64} = []
-    ϕ_mean::Vector{Float64} = []
-    ϕ_var::Vector{Float64} = []
-    pb = verbose ? ProgressMeter.Progress(m, desc="Two-way cross predictions for $m pairs of the top-performing genotypes") : nothing
-    for idx_parents in idx_parents_combinations
-        # idx_parents = idx_parents_combinations[1]
+    parents::Vector{String} = repeat([""], m)
+    ϕ_min::Vector{Float64} = repeat([NaN], m)
+    ϕ_max::Vector{Float64} = repeat([NaN], m)
+    ϕ_mean::Vector{Float64} = repeat([NaN], m)
+    ϕ_var::Vector{Float64} = repeat([NaN], m)
+    pb =
+        verbose ?
+        ProgressMeter.Progress(
+            m,
+            desc = "Two-way cross predictions for $m pairs of the top-performing genotypes",
+        ) : nothing
+    Threads.@threads for i = 1:length(idx_parents_combinations)
+        # i = 1; 
+        idx_parents = idx_parents_combinations[i]
         id = join(genomes.entries[idx_parents], "▓")
         Γ::Genomes = panmixis(
-            genomes, 
-            idx_entries=idx_parents, 
-            population_name=id,
-            n=n,
-            simple_mating_model=false,
-            ϵ=ϵ,
-            seed=seed,
-            verbose=false,
+            genomes,
+            idx_entries = idx_parents,
+            population_name = id,
+            n = n,
+            simple_mating_model = false,
+            ϵ = ϵ,
+            seed = seed,
+            verbose = false,
         )
-        Φ::Phenomes = predict_gebvs(first(fits)[end], Γ)
-        push!(parents, id)
-        push!(ϕ_min, minimum(Φ.phenotypes[:, 1]))
-        push!(ϕ_max, maximum(Φ.phenotypes[:, 1]))
-        push!(ϕ_mean, mean(Φ.phenotypes[:, 1]))
-        push!(ϕ_var, var(Φ.phenotypes[:, 1]))
+        Φ::Phenomes = predict_gebvs(fit, Γ)
+        parents[i] = id
+        ϕ_min[i] = minimum(Φ.phenotypes[:, 1])
+        ϕ_max[i] = maximum(Φ.phenotypes[:, 1])
+        ϕ_mean[i] = mean(Φ.phenotypes[:, 1])
+        ϕ_var[i] = var(Φ.phenotypes[:, 1])
         verbose ? ProgressMeter.next!(pb) : nothing
     end
     verbose ? ProgressMeter.finish!(pb) : nothing
     DataFrame(
         parents = parents,
+        ϕ_min = ϕ_min,
+        ϕ_max = ϕ_max,
+        ϕ_mean = ϕ_mean,
+        ϕ_var = ϕ_var,
+    )
+end
+
+
+"""
+    test_cross(genomes::Genomes, phenomes::Phenomes; 
+               idx_trait::Int64=1, idx_tester::Int64=1, n::Int64=1_000, 
+               seed::Int64=42, ϵ::Float64=0.001, 
+               GB_model::Function=GenomicBreedingModels.bayesa, 
+               verbose::Bool=false)::DataFrame
+
+Efficiently test crosses between a tester genotype and all other genotypes in a population.
+
+This function performs genomic prediction by crossing a specified tester genotype against each 
+other genotype in the population, computing genomic estimated breeding values (GEBVs) for the 
+resulting synthetic offspring.
+
+# Arguments
+- `genomes::Genomes`: Population of genotypes to evaluate
+- `phenomes::Phenomes`: Corresponding phenotypic data for model training
+- `idx_trait::Int64=1`: Index of the trait to evaluate
+- `idx_tester::Int64=1`: Index of the tester genotype in the population
+- `n::Int64=1_000`: Number of synthetic offspring to simulate per cross
+- `seed::Int64=42`: Random seed for reproducibility of cross simulations
+- `ϵ::Float64=0.001`: Tolerance parameter for cross generation
+- `GB_model::Function=GenomicBreedingModels.bayesa`: Genomic prediction model function
+- `verbose::Bool=false`: Enable progress reporting
+
+# Returns
+- `DataFrame`: Results table with columns:
+  - `tester_parents::Vector{String}`: Tester genotype identifier
+  - `other_parents::Vector{String}`: Other parent genotype identifier
+  - `ϕ_min::Vector{Float64}`: Minimum GEBV of offspring
+  - `ϕ_max::Vector{Float64}`: Maximum GEBV of offspring
+  - `ϕ_mean::Vector{Float64}`: Mean GEBV of offspring
+  - `ϕ_var::Vector{Float64}`: Variance of GEBVs in offspring
+
+# Notes
+Parallel processing is used via `Threads.@threads` for computational efficiency.
+
+# Examples
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
+julia> genomes, phenomes = sim(n=20);
+
+julia> df = test_cross(genomes, phenomes);
+
+julia> size(df)
+(19, 6)
+```
+
+"""
+function test_cross(
+    genomes::Genomes,
+    phenomes::Phenomes;
+    idx_trait::Int64 = 1,
+    idx_tester::Int64 = 1,
+    n::Int64 = 1_000,
+    seed::Int64 = 42,
+    ϵ::Float64 = 0.001,
+    GB_model::Function = GenomicBreedingModels.bayesa,
+    verbose::Bool = false,
+)::DataFrame
+    # genomes, phenomes = sim(n=20); idx_trait = 1; idx_tester::Int64 = 1; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
+    Σ = cov(genomes.allele_frequencies)
+    fit = let
+        fits, _ = fit_gp_models(
+            genomes,
+            slice(phenomes, idx_traits = [idx_trait]);
+            GB_model = GB_model,
+            save = false,
+            verbose = verbose,
+        )
+        fits[string.(keys(fits))[1]]
+    end
+    idx_other_parents = setdiff(collect(1:length(genomes.entries)), [idx_tester])
+    m = length(idx_other_parents)
+    tester_parents::Vector{String} = repeat([""], m)
+    other_parents::Vector{String} = repeat([""], m)
+    ϕ_min::Vector{Float64} = repeat([NaN], m)
+    ϕ_max::Vector{Float64} = repeat([NaN], m)
+    ϕ_mean::Vector{Float64} = repeat([NaN], m)
+    ϕ_var::Vector{Float64} = repeat([NaN], m)
+    genomes_1 = slice(genomes, idx_entries = [idx_tester])
+    pb =
+        verbose ?
+        ProgressMeter.Progress(
+            m,
+            desc = "Test-crossing $m genotypes against $(genomes.entries[idx_tester]) tester",
+        ) : nothing
+    Threads.@threads for i = 1:length(idx_other_parents)
+        # i = 1
+        idx = idx_other_parents[i]
+        Γ::Genomes = paired_cross(
+            genomes_1,
+            slice(genomes, idx_entries = [idx]);
+            Σ = Σ,
+            population_name = genomes.entries[idx],
+            n = n,
+            seed = seed,
+            ϵ = ϵ,
+            verbose = false,
+        )
+        Φ::Phenomes = predict_gebvs(fit, Γ)
+        tester_parents[i] = genomes.entries[idx_tester]
+        other_parents[i] = genomes.entries[idx]
+        ϕ_min[i] = minimum(Φ.phenotypes[:, 1])
+        ϕ_max[i] = maximum(Φ.phenotypes[:, 1])
+        ϕ_mean[i] = mean(Φ.phenotypes[:, 1])
+        ϕ_var[i] = var(Φ.phenotypes[:, 1])
+        verbose ? ProgressMeter.next!(pb) : nothing
+    end
+    verbose ? ProgressMeter.finish!(pb) : nothing
+    DataFrame(
+        tester_parents = tester_parents,
+        other_parents = other_parents,
         ϕ_min = ϕ_min,
         ϕ_max = ϕ_max,
         ϕ_mean = ϕ_mean,

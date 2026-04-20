@@ -149,7 +149,7 @@ This function performs crossing between two specific parent genomes, creating pr
 # Returns
 - `Genomes`: A new `Genomes` object containing the simulated progeny
 
-# Examples: TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+# Examples:
 
 ```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> genomes = GenomicBreedingCore.simulategenomes(n=119, l=10_000, verbose=false);

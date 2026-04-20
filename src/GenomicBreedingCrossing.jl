@@ -30,5 +30,6 @@ export fit_gp_models, predict_gebvs, simulate_gebv
 
 include("optim.jl")
 export sim, rank_entries, two_way_cross_predictions, synthetic_predictions
+export test_cross
 
 end
