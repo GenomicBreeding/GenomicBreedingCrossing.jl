@@ -112,6 +112,7 @@ end
         seed::Int64 = 42,
         ϵ::Float64 = 0.001,
         GB_model::Function = GenomicBreedingModels.bayesa,
+        fits::Union{Dict{String, Fit}, Nothing} = nothing,
         verbose::Bool = false,
     )::DataFrame
 
@@ -130,6 +131,7 @@ resulting offspring populations.
 - `seed::Int64=42`: Random seed for reproducibility (default: 42)
 - `ϵ::Float64=0.001`: Recombination rate parameter for paired crosses (default: 0.001)
 - `GB_model::Function=GenomicBreedingModels.bayesa`: Genomic prediction model to use (default: BayesA)
+- `fits::Union{Dict{String, Fit}, Nothing}=nothing`: Pre-fitted genomic prediction models. If nothing, model is fitted automatically.
 - `verbose::Bool=false`: Print progress updates (default: false)
 
 # Returns
@@ -160,20 +162,29 @@ function two_way_cross_predictions(
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
+    fits::Union{Dict{String, Fit}, Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
-    # genomes, phenomes = sim(); idx_trait = 1; n_parents::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
+    # genomes, phenomes = sim(); idx_trait = 1; n_parents::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; fits::Union{Dict{String, Fit}, Nothing} = nothing; verbose::Bool = true
+    if genomes.entries != phenomes.entries
+        throw(
+            "Please make sure that the Genomes and Phenomes struct have been merged and so correspond to each other's entries.",
+        )
+    end
     Σ = cov(genomes.allele_frequencies)
     idx = rank_entries(genomes, phenomes, idx_trait = idx_trait)[1:n_parents]
-    fit = let
+    fit = if isnothing(fits)
         fits, _ = fit_gp_models(
             genomes,
-            slice(phenomes, idx_entries = idx, idx_traits = [idx_trait]);
+            slice(phenomes, idx_traits = [idx_trait]);
             GB_model = GB_model,
             save = false,
             verbose = verbose,
         )
         fits[string.(keys(fits))[1]]
+    else
+        trait_name = phenomes.traits[idx_trait]
+        fits[trait_name]
     end
     m = Int64(round((n_parents^2 - n_parents) / 2))
     parent_1::Vector{String} = repeat([""], m)
@@ -230,6 +241,7 @@ end
                          n_parents_per_synthetic::Int64=5, n::Int64=1_000, 
                          seed::Int64=42, ϵ::Float64=0.001, 
                          GB_model::Function=GenomicBreedingModels.bayesa, 
+                         fits::Union{Dict{String, Fit}, Nothing} = nothing, 
                          verbose::Bool=false)::DataFrame
 
 Generate predictions for synthetic crosses by evaluating all combinations of top-performing parental genotypes.
@@ -244,6 +256,7 @@ Generate predictions for synthetic crosses by evaluating all combinations of top
 - `seed::Int64=42`: Random seed for reproducibility of synthetic population generation.
 - `ϵ::Float64=0.001`: Small tolerance parameter (currently unused).
 - `GB_model::Function=GenomicBreedingModels.bayesa`: Genomic breeding model function for GEBV prediction.
+- `fits::Union{Dict{String, Fit}, Nothing}=nothing`: Pre-fitted genomic prediction models. If nothing, model is fitted automatically.
 - `verbose::Bool=false`: If true, display progress bar and additional information during execution.
 
 # Returns
@@ -279,11 +292,12 @@ function synthetic_predictions(
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
+    fits::Union{Dict{String, Fit}, Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
-    # genomes, phenomes = sim(); idx_trait = 1; n_total_candidates::Int64 = 10; n_parents_per_synthetic::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
+    # genomes, phenomes = sim(); idx_trait = 1; n_total_candidates::Int64 = 10; n_parents_per_synthetic::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; fits::Union{Dict{String, Fit}, Nothing} = nothing; verbose::Bool = true
     idx = rank_entries(genomes, phenomes, idx_trait = idx_trait)[1:n_total_candidates]
-    fit = let
+    fit = if isnothing(fits)
         fits, _ = fit_gp_models(
             genomes,
             slice(phenomes, idx_traits = [idx_trait]);
@@ -292,6 +306,9 @@ function synthetic_predictions(
             verbose = verbose,
         )
         fits[string.(keys(fits))[1]]
+    else
+        trait_name = phenomes.traits[idx_trait]
+        fits[trait_name]
     end
     idx_parents_combinations = collect(combinations(idx, n_parents_per_synthetic))
     m = length(idx_parents_combinations)
@@ -343,7 +360,8 @@ end
     test_cross(genomes::Genomes, phenomes::Phenomes; 
                idx_trait::Int64=1, idx_tester::Int64=1, n::Int64=1_000, 
                seed::Int64=42, ϵ::Float64=0.001, 
-               GB_model::Function=GenomicBreedingModels.bayesa, 
+               GB_model::Function=GenomicBreedingModels.bayesa,
+               fits::Union{Dict{String, Fit}, Nothing}=nothing,
                verbose::Bool=false)::DataFrame
 
 Efficiently test crosses between a tester genotype and all other genotypes in a population.
@@ -384,7 +402,6 @@ julia> df = test_cross(genomes, phenomes, GB_model = GenomicBreedingModels.ols);
 julia> size(df)
 (19, 6)
 ```
-
 """
 function test_cross(
     genomes::Genomes,
@@ -395,11 +412,17 @@ function test_cross(
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
+    fits::Union{Dict{String, Fit}, Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
-    # genomes, phenomes = sim(n=20); idx_trait = 1; idx_tester::Int64 = 1; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true
+    # genomes, phenomes = sim(n=20); idx_trait = 1; idx_tester::Int64 = 1; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; fits::Union{Dict{String, Fit}, Nothing} = nothing; verbose::Bool = true
+    if genomes.entries != phenomes.entries
+        throw(
+            "Please make sure that the Genomes and Phenomes struct have been merged and so correspond to each other's entries.",
+        )
+    end
     Σ = cov(genomes.allele_frequencies)
-    fit = let
+    fit = if isnothing(fits)
         fits, _ = fit_gp_models(
             genomes,
             slice(phenomes, idx_traits = [idx_trait]);
@@ -408,6 +431,9 @@ function test_cross(
             verbose = verbose,
         )
         fits[string.(keys(fits))[1]]
+    else
+        trait_name = phenomes.traits[idx_trait]
+        fits[trait_name]
     end
     idx_other_parents = setdiff(collect(1:length(genomes.entries)), [idx_tester])
     m = length(idx_other_parents)
@@ -455,4 +481,67 @@ function test_cross(
         ϕ_mean = ϕ_mean,
         ϕ_var = ϕ_var,
     )
+end
+
+function define_heterotic_groups(
+    genomes::Genomes,
+    phenomes::Phenomes;
+    idx_trait::Int64 = 1,
+    testers::Vector{String} = phenomes.entries[1:minimum([2, length(phenomes.entries)])],
+    n::Int64 = 1_000,
+    seed::Int64 = 42,
+    ϵ::Float64 = 0.001,
+    GB_model::Function = GenomicBreedingModels.bayesa,
+    fits::Union{Dict{String, Fit}, Nothing} = nothing,
+    verbose::Bool = false,
+)::DataFrame
+    # genomes, phenomes = sim(n=20); idx_trait = 1; testers::Vector{String} = phenomes.entries[1:minimum([2, length(phenomes.entries)])]; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true;
+    # fits::Union{Dict{String,Fit}, Nothing}, _ = fit_gp_models(genomes, slice(phenomes, idx_traits = [idx_trait]); GB_model = GB_model, save = false, verbose = verbose)
+    if genomes.entries != phenomes.entries
+        throw(
+            "Please make sure that the Genomes and Phenomes struct have been merged and so correspond to each other's entries.",
+        )
+    end
+    if (genomes.entries ∩ testers) != testers
+        throw(
+            "Testers ($(join(testers, ", "))) are not among the entries in the genomes and phenomes data.",
+        )
+    end
+    test_crosses::Dict{String, DataFrame} = Dict()
+    for tester in testers
+        # tester = testers[1]
+        df_tmp = test_cross(
+            genomes,
+            phenomes,
+            idx_trait=idx_trait,
+            idx_tester=findfirst(genomes.entries .== tester),
+            n=n,
+            seed=seed,
+            ϵ=ϵ,
+            GB_model=GB_model,
+            fits=fits,
+            verbose=verbose,
+        )
+        UnicodePlots.histogram(df_tmp.ϕ_mean)
+        test_crosses[tester] = df_tmp
+    end
+
+    # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    # entries::Vector{String} = genomes.entries
+    # groupings::Vector{String} = repeat([""], length(entries))
+    # for entry in entries
+    #     # entry = entries[1]
+    #     testers::Vector{String} = []
+    #     perfs::Vector{Float64} = []
+    #     for (k, v) in test_crosses
+    #         idx = v.other_parents .== entry
+    #         push!(testers, k)
+    #         push!(perfs, v.ϕ_mean[idx])
+    #     end
+    # end
+
+
+    DataFrame()
 end
