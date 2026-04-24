@@ -43,7 +43,7 @@ function sim(; n::Int64 = 500, l::Int64 = 10_000)::Tuple{Genomes,Phenomes}
     genomes = GenomicBreedingCore.simulategenomes(n = n, l = l, verbose = false)
     trials, simulated_effects = GenomicBreedingCore.simulatetrials(
         genomes = genomes,
-        f_add_dom_epi = [0.5 0.4 0.1;],
+        f_add_dom_epi = [0.5 0.3 0.2;],
         n_years = 1,
         n_seasons = 1,
         n_harvests = 1,
@@ -162,7 +162,7 @@ function two_way_cross_predictions(
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
-    fits::Union{Dict{String, Fit}, Nothing} = nothing,
+    fits::Union{Dict{String,Fit},Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
     # genomes, phenomes = sim(); idx_trait = 1; n_parents::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; fits::Union{Dict{String, Fit}, Nothing} = nothing; verbose::Bool = true
@@ -292,7 +292,7 @@ function synthetic_predictions(
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
-    fits::Union{Dict{String, Fit}, Nothing} = nothing,
+    fits::Union{Dict{String,Fit},Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
     # genomes, phenomes = sim(); idx_trait = 1; n_total_candidates::Int64 = 10; n_parents_per_synthetic::Int64=5; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; fits::Union{Dict{String, Fit}, Nothing} = nothing; verbose::Bool = true
@@ -412,7 +412,7 @@ function test_cross(
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
-    fits::Union{Dict{String, Fit}, Nothing} = nothing,
+    fits::Union{Dict{String,Fit},Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
     # genomes, phenomes = sim(n=20); idx_trait = 1; idx_tester::Int64 = 1; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; fits::Union{Dict{String, Fit}, Nothing} = nothing; verbose::Bool = true
@@ -483,65 +483,130 @@ function test_cross(
     )
 end
 
+"""
+    define_heterotic_groups(
+        genomes::Genomes,
+        phenomes::Phenomes;
+        idx_trait::Int64 = 1,
+        testers::Vector{String} = phenomes.entries[1:minimum([2, length(phenomes.entries)])],
+        n::Int64 = 100,
+        seed::Int64 = 42,
+        ϵ::Float64 = 0.001,
+        GB_model::Function = GenomicBreedingModels.bayesa,
+        fits::Union{Dict{String, Fit}, Nothing} = nothing,
+        verbose::Bool = false,
+    )::DataFrame
+
+Assign each entry in a breeding population to heterotic groups based on their performance in test crosses with designated tester lines.
+
+This function evaluates all entries by crossing them with multiple tester genotypes and assigns each entry to a heterotic group based on which tester produces the most favorable progeny performance. The assignment criterion combines both the mean genomic estimated breeding value (GEBV) and its variance to identify entries that produce high-performing offspring while maintaining genetic diversity.
+
+# Arguments
+- `genomes::Genomes`: Genomic data for all entries
+- `phenomes::Phenomes`: Phenotypic data for all entries (must match genomes.entries)
+- `idx_trait::Int64 = 1`: Index of the target trait for evaluation
+- `testers::Vector{String}`: Tester lines to use for heterotic group assignment (default: first 1-2 entries)
+- `n::Int64 = 100`: Number of simulated progeny per cross
+- `seed::Int64 = 42`: Random seed for reproducibility
+- `ϵ::Float64 = 0.001`: Convergence threshold for the prediction model
+- `GB_model::Function = GenomicBreedingModels.bayesa`: Genomic prediction model function
+- `fits::Union{Dict{String, Fit}, Nothing} = nothing`: Pre-computed model fits (optional)
+- `verbose::Bool = false`: Display progress information
+
+# Returns
+- `DataFrame`: Two-column dataframe with columns `entries` (all genotype names) and `groupings` (assigned heterotic group)
+
+# Details
+Entries are assigned as follows:
+- If an entry does not produce progeny with all testers, it is assigned to its own group
+- Otherwise, it is assigned to the heterotic group of the tester producing the lowest mean GEBV × √variance of progeny
+
+# Throws
+- Error if `genomes.entries ≠ phenomes.entries`
+- Error if any tester is not present in the genomes/phenomes data
+
+# Examples
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
+julia> genomes, phenomes = sim(n=20);
+
+julia> df = test_cross(genomes, phenomes, GB_model = GenomicBreedingModels.ols);
+
+julia> size(df)
+(19, 6)
+
+julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
+
+julia> df = test_cross(genomes, phenomes, fits=fits);
+
+julia> size(df)
+(19, 6)
+```
+"""
 function define_heterotic_groups(
     genomes::Genomes,
     phenomes::Phenomes;
     idx_trait::Int64 = 1,
     testers::Vector{String} = phenomes.entries[1:minimum([2, length(phenomes.entries)])],
-    n::Int64 = 1_000,
+    n::Int64 = 100,
     seed::Int64 = 42,
     ϵ::Float64 = 0.001,
     GB_model::Function = GenomicBreedingModels.bayesa,
-    fits::Union{Dict{String, Fit}, Nothing} = nothing,
+    fits::Union{Dict{String,Fit},Nothing} = nothing,
     verbose::Bool = false,
 )::DataFrame
-    # genomes, phenomes = sim(n=20); idx_trait = 1; testers::Vector{String} = phenomes.entries[1:minimum([2, length(phenomes.entries)])]; n::Int64 = 1_000; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true;
-    # fits::Union{Dict{String,Fit}, Nothing}, _ = fit_gp_models(genomes, slice(phenomes, idx_traits = [idx_trait]); GB_model = GB_model, save = false, verbose = verbose)
+    # genomes, phenomes = sim(n=20); idx_trait = 1; testers::Vector{String} = phenomes.entries[1:minimum([3, length(phenomes.entries)])]; n::Int64 = 100; seed::Int64 = 42; ϵ::Float64 = 0.001; GB_model::Function = GenomicBreedingModels.ols; verbose::Bool = true; fits::Union{Dict{String,Fit}, Nothing}, _ = fit_gp_models(genomes, slice(phenomes, idx_traits = [idx_trait]); GB_model = GB_model, save = false, verbose = verbose)
     if genomes.entries != phenomes.entries
         throw(
             "Please make sure that the Genomes and Phenomes struct have been merged and so correspond to each other's entries.",
         )
     end
-    if (genomes.entries ∩ testers) != testers
+    if sort(genomes.entries ∩ testers) != sort(testers)
         throw(
             "Testers ($(join(testers, ", "))) are not among the entries in the genomes and phenomes data.",
         )
     end
-    test_crosses::Dict{String, DataFrame} = Dict()
+    test_crosses::Dict{String,DataFrame} = Dict()
     for tester in testers
         # tester = testers[1]
         df_tmp = test_cross(
             genomes,
             phenomes,
-            idx_trait=idx_trait,
-            idx_tester=findfirst(genomes.entries .== tester),
-            n=n,
-            seed=seed,
-            ϵ=ϵ,
-            GB_model=GB_model,
-            fits=fits,
-            verbose=verbose,
+            idx_trait = idx_trait,
+            idx_tester = findfirst(genomes.entries .== tester),
+            n = n,
+            seed = seed,
+            ϵ = ϵ,
+            GB_model = GB_model,
+            fits = fits,
+            verbose = verbose,
         )
         UnicodePlots.histogram(df_tmp.ϕ_mean)
         test_crosses[tester] = df_tmp
     end
-
-    # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    # TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    # entries::Vector{String} = genomes.entries
-    # groupings::Vector{String} = repeat([""], length(entries))
-    # for entry in entries
-    #     # entry = entries[1]
-    #     testers::Vector{String} = []
-    #     perfs::Vector{Float64} = []
-    #     for (k, v) in test_crosses
-    #         idx = v.other_parents .== entry
-    #         push!(testers, k)
-    #         push!(perfs, v.ϕ_mean[idx])
-    #     end
-    # end
-
-
-    DataFrame()
+    entries::Vector{String} = genomes.entries
+    groupings::Vector{String} = repeat([""], length(entries))
+    for (i, entry) in enumerate(entries)
+        # i = 5; entry = entries[i]
+        ids::Vector{String} = []
+        perfs::Vector{Float64} = []
+        for (tester, df_test_cross) in test_crosses
+            # tester = string.(keys(test_crosses))[3]; df_test_cross = test_crosses[tester]
+            idx = findfirst(df_test_cross.other_parents .== entry)
+            if !isnothing(idx)
+                # Using mean GEBV * stdev of the GEBVs --> we want both high GEBV and also retain a lot of variation for further improvement
+                perf = df_test_cross.ϕ_mean[idx] * sqrt(df_test_cross.ϕ_var[idx])
+                push!(ids, tester)
+                push!(perfs, perf)
+            end
+        end
+        if length(ids) < length(testers)
+            # For the ids per se
+            groupings[i] = entries[i]
+        else
+            # The entry belongs to the tester which generates the worst progenies
+            @show DataFrame(ids = ids, perfs = perfs)
+            groupings[i] = ids[argmin(perfs)]
+        end
+    end
+    DataFrame(entries = entries, groupings = groupings)
 end
