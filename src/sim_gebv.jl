@@ -133,6 +133,10 @@ function predict_gebvs(
         genomes = genomes,
         idx_entries = idx_entries,
     )
+    # Add uncertainty from the heritability estimate
+    σ_ϵ = 1 - (1 / (fit.metrics["h²"] + 1e-7))
+    phenomes.phenotypes[:, 1] + rand(Normal(0.0, σ_ϵ), length(idx_entries))
+    # Output
     phenomes
 end
 
