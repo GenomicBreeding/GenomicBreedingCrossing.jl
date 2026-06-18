@@ -174,7 +174,7 @@ true
 ```
 """
 function select_top_performers(
-    phenomes::Phenomes,
+    phenomes::Phenomes;
     idx_trait::Int64 = 1,
     select_top::Bool = true,
     selection_intensity::Float64 = 0.1,
@@ -291,7 +291,13 @@ function simulate_gebv(
         bp.distributions[1, j] = Normal(mean(P.phenotypes[:, 1]), std(P.phenotypes[:, 1])) # cycles x traits
         for t = 1:n_cycles
             # t = 1
-            idx_entries = select_top_performers(P, idx_trait=1, select_top=select_top, selection_intensity=selection_intensity, selection_efficiency=selection_efficiency)
+            idx_entries = select_top_performers(
+                P,
+                idx_trait = 1,
+                select_top = select_top,
+                selection_intensity = selection_intensity,
+                selection_efficiency = selection_efficiency,
+            )
             bp.selections[t, j] = Normal(
                 mean(P.phenotypes[idx_entries, 1]),
                 std(P.phenotypes[idx_entries, 1]),
@@ -310,7 +316,13 @@ function simulate_gebv(
             verbose ? ProgressMeter.next!(pb) : nothing
         end
         # If we were select on the final cycle just for completeness and balancedness of the BreedingPopulations struct
-        idx_entries = select_top_performers(P, idx_trait=1, select_top=select_top, selection_intensity=selection_intensity, selection_efficiency=selection_efficiency)
+        idx_entries = select_top_performers(
+            P,
+            idx_trait = 1,
+            select_top = select_top,
+            selection_intensity = selection_intensity,
+            selection_efficiency = selection_efficiency,
+        )
         bp.selections[n_cycles+1, j] =
             Normal(mean(P.phenotypes[idx_entries, 1]), std(P.phenotypes[idx_entries, 1]))
     end
