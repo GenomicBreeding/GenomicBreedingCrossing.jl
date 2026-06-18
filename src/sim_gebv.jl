@@ -89,7 +89,8 @@ Predict Genomic Estimated Breeding Values (GEBVs) for a set of genotypes using a
 # Details
 The function creates a new `Phenomes` object with predicted values for the selected entries. The predictions 
 are computed using the provided fitted model via `GenomicBreedingModels.predict()`. Entry and population 
-information are inherited from the input `genomes` object.
+information are inherited from the input `genomes` object. Random noise is added to predictions based on 
+the heritability estimate from the fitted model to simulate environmental variation.
 
 # Example
 ```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
@@ -133,12 +134,69 @@ function predict_gebvs(
         genomes = genomes,
         idx_entries = idx_entries,
     )
-    # Add uncertainty from the heritability estimate
+    # Add uncertainty using heritability estimate
     σ_y = std(phenomes.phenotypes[:, 1])
     σ_ϵ = (1 - fit.metrics["h²"] + 1e-7) * σ_y
     phenomes.phenotypes[:, 1] + rand(Normal(0.0, σ_ϵ), length(idx_entries))
     # Output
     phenomes
+end
+
+"""
+    select_top_performers(phenomes::Phenomes, idx_trait::Int64=1, select_top::Bool=true, selection_intensity::Float64=0.1, selection_efficiency::Float64=0.9)::Vector{Int64}
+
+Select top-performing individuals from a population based on phenotypic trait values.
+
+# Arguments
+- `phenomes::Phenomes`: Population phenotype data structure containing phenotypic measurements
+- `idx_trait::Int64=1`: Column index of the trait to use for selection (default: first trait)
+- `select_top::Bool=true`: If `true`, select highest trait values; if `false`, select lowest
+- `selection_intensity::Float64=0.1`: Proportion of population to select (range: 0.0-1.0)
+- `selection_efficiency::Float64=0.9`: Probability of selecting each top-ranked individual; lower-ranked individuals are selected as fallback
+
+# Returns
+- `Vector{Int64}`: Indices of selected individuals
+
+# Description
+Selects individuals based on their phenotypic values for a specified trait. With each iteration,
+the function probabilistically selects top-ranked candidates according to `selection_efficiency`.
+If a top candidate is not selected, a random individual from the remaining available population
+is chosen instead. This allows for stochastic selection while maintaining selection pressure.
+
+# Example
+```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
+julia> _, (_, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
+
+julia> idx_entries = select_top_performers(phenomes);
+
+julia> mean(skipmissing(phenomes.phenotypes[:, 1])) < mean(phenomes.phenotypes[idx_entries, 1])
+true
+```
+"""
+function select_top_performers(
+    phenomes::Phenomes,
+    idx_trait::Int64 = 1,
+    select_top::Bool = true,
+    selection_intensity::Float64 = 0.1,
+    selection_efficiency::Float64 = 0.9,
+)
+    # _, (_, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); idx_trait::Int64=1; select_top::Bool=true; selection_intensity::Float64=0.1; selection_efficiency::Float64=0.9
+    idx = findall(.!ismissing.(phenomes.phenotypes[:, idx_trait]))
+    idx = idx[sortperm(phenomes.phenotypes[idx, 1], rev = select_top)]
+    n = length(idx)
+    s = Int64(ceil(selection_intensity * n))
+    # Select top individuals based on selection intensity, applying selection efficiency
+    # to probabilistically allow some lower-ranked individuals to be selected
+    idx_entries = []
+    for i = 1:s
+        if rand() <= selection_efficiency
+            push!(idx_entries, idx[i])
+        else
+            avail = setdiff(idx, idx_entries)
+            push!(idx_entries, sample(avail))
+        end
+    end
+    Int64.(idx_entries)
 end
 
 """
@@ -149,12 +207,13 @@ end
         n_cycles::Int64 = 3,
         population_size::Int64 = 1_000,
         selection_intensity::Float64 = 0.1,
+        selection_efficiency::Float64 = 0.9,
         simple_mating_model::Bool = false,
         verbose::Bool = true,
         seed::Int64 = 42,
     )::BreedingPopulations
 
-Simulate genomic estimated breeding values (GEBV) through multiple selection cycles using pre-computed genomic prediction model/s.
+Simulate genomic estimated breeding values (GEBV) through multiple selection cycles using pre-computed genomic prediction models.
 
 This function performs iterative selection and breeding cycles for multiple traits. In each cycle,
 individuals are selected based on predicted GEBVs, and a new population is generated through panmixis.
@@ -164,13 +223,13 @@ Selection intensity determines the proportion of top individuals selected in eac
 - `genomes::Genomes`: Initial genome data for the population.
 - `phenomes::Phenomes`: Phenotype data containing trait information.
 - `fits::Dict{String, Fit}`: Dictionary mapping trait names to fitted genomic prediction models.
-- `n_cycles::Int64 = 3`: Number of selection cycles to perform.
-- `population_size::Int64 = 1_000`: Size of the population generated after each selection.
-- `selection_intensity::Float64 = 0.1`: Proportion of top individuals to select (0.0 to 1.0).
-- `simple_mating_model::Bool`: Use the simplistic allele frequency mean crossing model, otherwise
-   simulate linkage disequillibrium for use in sampling from a multivariate normal distribution. Default: `false`
+- `n_cycles::Int64`: Number of selection cycles to perform. Default: `3`
+- `population_size::Int64`: Size of the population generated after each selection. Default: `1_000`
+- `selection_intensity::Float64`: Proportion of top individuals to select (0.0 to 1.0). Default: `0.1`
+- `selection_efficiency::Float64`: Probability of selecting top-ranked individuals versus random selection. Default: `0.9`
+- `simple_mating_model::Bool`: Use simplistic allele frequency mean crossing model, otherwise simulate linkage disequilibrium. Default: `false`
 - `verbose::Bool`: Whether to display progress meter during simulation. Default: `true`
-- `seed::Int64 = 42`: Random seed for reproducibility in panmixis operations.
+- `seed::Int64`: Random seed for reproducibility in panmixis operations. Default: `42`
 
 # Returns
 - `BreedingPopulations`: Structure containing selection distributions and phenotypic distributions for all traits and cycles.
@@ -189,11 +248,11 @@ julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=tr
 
 julia> (fits, fname_fits_jld2) = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols, save=false, verbose=false);
 
-julia> bp_05 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.05, verbose=false);
+julia> bp_05 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.05, selection_efficiency=1.0, verbose=false);
 
-julia> bp_10 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.10, verbose=false);
+julia> bp_10 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.10, selection_efficiency=1.0, verbose=false);
 
-julia> bp_95 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.95, verbose=false);
+julia> bp_95 = simulate_gebv(genomes, phenomes, fits, selection_intensity=0.95, selection_efficiency=1.0, verbose=false);
 
 julia> mean(bp_05.distributions[end]) > mean(bp_10.distributions[end]) > mean(bp_95.distributions[end])
 true
@@ -208,12 +267,14 @@ function simulate_gebv(
     fits::Dict{String,Fit};
     n_cycles::Int64 = 3,
     population_size::Int64 = 1_000,
+    select_top::Bool = true,
     selection_intensity::Float64 = 0.1,
+    selection_efficiency::Float64 = 0.9,
     simple_mating_model::Bool = false,
     verbose::Bool = true,
     seed::Int64 = 42,
 )::BreedingPopulations
-    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); fits, _fname_fits_jld2 = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols); n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
+    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); fits, _fname_fits_jld2 = fit_gp_models(genomes, phenomes, GB_model=GenomicBreedingModels.ols); n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; selection_efficiency::Float64 = 0.9; simple_mating_model::Bool = false; verbose::Bool = true; seed::Int64 = 42
     bp, _ = BreedingPopulations(n_cycles = n_cycles, n_traits = length(phenomes.traits))
     pb =
         verbose ?
@@ -222,7 +283,7 @@ function simulate_gebv(
             "Simulating intra-population improvement",
         ) : nothing
     for (j, trait) in enumerate(phenomes.traits)
-        # j = 1; trait = phenomes.traits[j]
+        # j = 2; trait = phenomes.traits[j]
         fit = fits[trait]
         G = clone(genomes)
         P = predict_gebvs(fit, G)
@@ -230,12 +291,7 @@ function simulate_gebv(
         bp.distributions[1, j] = Normal(mean(P.phenotypes[:, 1]), std(P.phenotypes[:, 1])) # cycles x traits
         for t = 1:n_cycles
             # t = 1
-            idx_entries = let
-                idx = sortperm(P.phenotypes[:, 1], rev = true)
-                n = length(idx)
-                s = Int64(ceil(selection_intensity * n))
-                idx[1:s]
-            end
+            idx_entries = select_top_performers(P, idx_trait=1, select_top=select_top, selection_intensity=selection_intensity, selection_efficiency=selection_efficiency)
             bp.selections[t, j] = Normal(
                 mean(P.phenotypes[idx_entries, 1]),
                 std(P.phenotypes[idx_entries, 1]),
@@ -254,12 +310,7 @@ function simulate_gebv(
             verbose ? ProgressMeter.next!(pb) : nothing
         end
         # If we were select on the final cycle just for completeness and balancedness of the BreedingPopulations struct
-        idx_entries = let
-            idx = sortperm(P.phenotypes[:, 1], rev = true)
-            n = length(idx)
-            s = Int64(ceil(selection_intensity * n))
-            idx[1:s]
-        end
+        idx_entries = select_top_performers(P, idx_trait=1, select_top=select_top, selection_intensity=selection_intensity, selection_efficiency=selection_efficiency)
         bp.selections[n_cycles+1, j] =
             Normal(mean(P.phenotypes[idx_entries, 1]), std(P.phenotypes[idx_entries, 1]))
     end
@@ -314,16 +365,16 @@ This function first fits genomic prediction models using the specified model fun
 ```jldoctest; setup = :(using GenomicBreedingCore, GenomicBreedingModels, GenomicBreedingCrossing, StatsBase, DataFrames, Combinatorics)
 julia> _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false);
 
-julia> bp_0 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, verbose=false);
+julia> bp_5 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.05, selection_efficiency=1.0, verbose=false);
 
-julia> bp_1 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.05, verbose=false);
+julia> bp_10 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.10, selection_efficiency=1.0, verbose=false);
 
-julia> bp_2 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.95, verbose=false);
+julia> bp_95 = simulate_gebv(genomes, phenomes, GB_model=GenomicBreedingModels.ols, selection_intensity=0.95, selection_efficiency=1.0, verbose=false);
 
-julia> mean(bp_1.distributions[end]) >= mean(bp_0.distributions[end]) > mean(bp_2.distributions[end])
+julia> mean(bp_5.distributions[end]) > mean(bp_10.distributions[end]) > mean(bp_95.distributions[end])
 true
 
-julia> var(bp_1.distributions[end]) < var(bp_0.distributions[end]) < var(bp_2.distributions[end])
+julia> var(bp_5.distributions[end]) < var(bp_10.distributions[end]) < var(bp_95.distributions[end])
 true
 ```
 """
@@ -333,13 +384,15 @@ function simulate_gebv(
     GB_model::Function = GenomicBreedingModels.bayesa,
     n_cycles::Int64 = 3,
     population_size::Int64 = 1_000,
+    select_top::Bool = true,
     selection_intensity::Float64 = 0.1,
+    selection_efficiency::Float64 = 0.9,
     simple_mating_model::Bool = false,
     save::Bool = true,
     verbose::Bool = true,
     seed::Int64 = 42,
 )::BreedingPopulations
-    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); GB_model::Function = GenomicBreedingModels.ols; n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
+    # _, (genomes, phenomes) = BreedingPopulations(simulate_genomes_phenomes=true, verbose=false); GB_model::Function = GenomicBreedingModels.ols; n_cycles::Int64 = 3; population_size::Int64 = 1_000; selection_intensity::Float64 = 0.1; selection_efficiency::Float64 = 0.9; save::Bool = true; verbose::Bool = true; seed::Int64 = 42
     fits, fname_fits_jld2 = fit_gp_models(
         genomes,
         phenomes,
@@ -353,7 +406,9 @@ function simulate_gebv(
         fits;
         n_cycles = n_cycles,
         population_size = population_size,
+        select_top = select_top,
         selection_intensity = selection_intensity,
+        selection_efficiency = selection_efficiency,
         simple_mating_model = simple_mating_model,
         verbose = verbose,
         seed = seed,

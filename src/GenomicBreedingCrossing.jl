@@ -26,7 +26,7 @@ include("crossing.jl")
 export panmixis, paired_cross
 
 include("sim_gebv.jl")
-export fit_gp_models, predict_gebvs, simulate_gebv
+export fit_gp_models, predict_gebvs, select_top_performers, simulate_gebv
 
 include("optim.jl")
 export sim, rank_entries, two_way_cross_predictions, synthetic_predictions
