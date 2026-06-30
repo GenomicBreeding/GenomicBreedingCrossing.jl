@@ -25,7 +25,7 @@ mutable struct BreedingPopulations
                 genomes = genomes,
                 n_years = 1,
                 n_seasons = 1,
-                n_harvests = 1,
+                n_measurements = 1,
                 n_sites = 1,
                 n_replications = 1,
                 sparsity = 0.10,

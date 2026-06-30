@@ -23,7 +23,7 @@ The trial simulation uses a fixed genetic architecture with effects distributed 
 - Dominance effects: 40%
 - Epistatic effects: 10%
 
-Trials are simulated across a single year, season, harvest, site, and replication.
+Trials are simulated across a single year, season, measurement, site, and replication.
 See GenomicBreedingCore.jl documentation if you wish more fine-tuned simulations.
 
 # Examples
@@ -46,7 +46,7 @@ function sim(; n::Int64 = 500, l::Int64 = 10_000)::Tuple{Genomes,Phenomes}
         f_add_dom_epi = [0.5 0.3 0.2;],
         n_years = 1,
         n_seasons = 1,
-        n_harvests = 1,
+        n_measurements = 1,
         n_sites = 1,
         n_replications = 1,
         verbose = false,
